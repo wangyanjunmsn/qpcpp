@@ -22,8 +22,8 @@
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
 //============================================================================
-//! @date Last updated on: 2023-08-26
-//! @version Last updated for: @ref qpcpp_7_3_0
+//! @date Last updated on: 2023-11-18
+//! @version Last updated for: @ref qpcpp_7_3_1
 //!
 //! @file
 //! @brief QF/C++ port to POSIX (multithreaded with P-threads)
@@ -155,29 +155,46 @@ int run() {
     // exit the startup critical section to unblock any active objects
     // started before calling QF_run()
     pthread_mutex_unlock(&l_startupMutex);
-
-    // get the absolute monotonic time for no-drift sleeping
-    static struct timespec next_tick;
-    clock_gettime(CLOCK_MONOTONIC, &next_tick);
-
-    // round down nanoseconds to the nearest configured period
-    next_tick.tv_nsec = (next_tick.tv_nsec / l_tick.tv_nsec) * l_tick.tv_nsec;
-
     l_isRunning = true;
-    while (l_isRunning) { // the clock tick loop...
 
-        // advance to the next tick (absolute time)
-        next_tick.tv_nsec += l_tick.tv_nsec;
-        if (next_tick.tv_nsec >= NSEC_PER_SEC) {
-            next_tick.tv_nsec -= NSEC_PER_SEC;
-            next_tick.tv_sec  += 1;
+    // The provided clock tick service configured?
+    if ((l_tick.tv_sec != 0) || (l_tick.tv_nsec != 0)) {
+
+        // get the absolute monotonic time for no-drift sleeping
+        static struct timespec next_tick;
+        clock_gettime(CLOCK_MONOTONIC, &next_tick);
+
+        // round down nanoseconds to the nearest configured period
+        next_tick.tv_nsec
+            = (next_tick.tv_nsec / l_tick.tv_nsec) * l_tick.tv_nsec;
+
+        while (l_isRunning) { // the clock tick loop...
+
+            // advance to the next tick (absolute time)
+            next_tick.tv_nsec += l_tick.tv_nsec;
+            if (next_tick.tv_nsec >= NSEC_PER_SEC) {
+                next_tick.tv_nsec -= NSEC_PER_SEC;
+                next_tick.tv_sec  += 1;
+            }
+
+            // sleep without drifting till next_time (absolute), see NOTE03
+            if (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
+                                &next_tick, NULL) == 0) // success?
+            {
+                // clock tick callback (must call QTimeEvt::TICK_X() once)
+                onClockTick();
+            }
         }
+    }
+    else { // The provided system clock tick NOT configured
 
-        // sleep without drifting till next_time (absolute), see NOTE03
-        if (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
-                            &next_tick, NULL) == 0) // success?
-        {
-            // clock tick callback (must call QTIMEEVT_TICK_X())
+        while (l_isRunning) { // the clock tick loop...
+
+            // In case the application intentionally DISABLED the provided
+            // system clock, the QF_onClockTick() callback is used to let
+            // the application implement the alternative tick service.
+            // In that case the QF_onClockTick() must internally WAIT
+            // for the desired clock period before calling QTIMEEVT_TICK_X().
             onClockTick();
         }
     }
@@ -195,8 +212,12 @@ void stop() {
 }
 //............................................................................
 void setTickRate(std::uint32_t ticksPerSec, int tickPrio) {
-    Q_REQUIRE_ID(600, ticksPerSec != 0U);
-    l_tick.tv_nsec = NSEC_PER_SEC / ticksPerSec;
+    if (ticksPerSec != 0U) {
+        l_tick.tv_nsec = NSEC_PER_SEC / ticksPerSec;
+    }
+    else {
+        l_tick.tv_nsec = 0U; // means NO system clock tick
+    }
     l_tickPrio = tickPrio;
 }
 

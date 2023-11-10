@@ -310,7 +310,6 @@ namespace QF {
 void init() {
     bzero_(&QF::priv_,                 sizeof(QF::priv_));
     bzero_(&QK_priv_,                  sizeof(QK_priv_));
-    bzero_(&QTimeEvt::timeEvtHead_[0], sizeof(QTimeEvt::timeEvtHead_));
     bzero_(&QActive::registry_[0],     sizeof(QActive::registry_));
 
     #ifndef Q_UNSAFE

@@ -44,11 +44,11 @@
 #define QP_HPP_
 
 //============================================================================
-#define QP_VERSION     730U
-#define QP_VERSION_STR "7.3.0"
+#define QP_VERSION     731U
+#define QP_VERSION_STR "7.3.1"
 
-//! Encrypted  current QP release (7.3.0) and date (2023-09-12)
-#define QP_RELEASE     0x765D9D25U
+//! Encrypted  current QP release (7.3.1) and date (2023-12-01)
+#define QP_RELEASE     0x76318414U
 
 //============================================================================
 //! @cond INTERNAL
@@ -723,20 +723,20 @@ namespace QP {
 //${QF::QActive} .............................................................
 class QActive : public QP::QAsm {
 protected:
+    std::uint8_t m_prio;
+    std::uint8_t m_pthre;
 
-#ifdef QACTIVE_EQUEUE_TYPE
-    QACTIVE_EQUEUE_TYPE m_eQueue;
-#endif // def QACTIVE_EQUEUE_TYPE
+#ifdef QACTIVE_THREAD_TYPE
+    QACTIVE_THREAD_TYPE m_thread;
+#endif // def QACTIVE_THREAD_TYPE
 
 #ifdef QACTIVE_OS_OBJ_TYPE
     QACTIVE_OS_OBJ_TYPE m_osObject;
 #endif // def QACTIVE_OS_OBJ_TYPE
 
-#ifdef QACTIVE_THREAD_TYPE
-    QACTIVE_THREAD_TYPE m_thread;
-#endif // def QACTIVE_THREAD_TYPE
-    std::uint8_t m_prio;
-    std::uint8_t m_pthre;
+#ifdef QACTIVE_EQUEUE_TYPE
+    QACTIVE_EQUEUE_TYPE m_eQueue;
+#endif // def QACTIVE_EQUEUE_TYPE
 
 public:
     static QActive * registry_[QF_MAX_ACTIVE + 1U];

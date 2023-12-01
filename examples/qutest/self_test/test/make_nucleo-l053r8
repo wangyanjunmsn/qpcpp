@@ -1,13 +1,13 @@
 ##############################################################################
-# Product: Makefile for QP/C on NUCLEO-L053R8 board, QUTEST, GNU-ARM
-# Last Updated for Version: 6.9.4
-# Date of the Last Update:  2021-12-01
+# Product: Makefile for QP/C++ on NUCLEO-L053R8 board, QUTEST, GNU-ARM
+# Last Updated for Version: 7.3.1
+# Date of the Last Update:  2023-11-13
 #
 #                    Q u a n t u m  L e a P s
 #                    ------------------------
 #                    Modern Embedded Software
 #
-# Copyright (C) 2005-2021 Quantum Leaps, LLC. All rights reserved.
+# Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
 #
 # This program is open source software: you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as published
@@ -50,7 +50,7 @@
 #
 PROJECT := test_qutest
 TARGET  := nucleo-l053r8
-TARGET_DIR := ..\..\target_nucleo-l053r8
+TARGET_DIR := ..\..\..\..\3rd_party\nucleo-l053r8\qutest
 
 #-----------------------------------------------------------------------------
 # project directories:
@@ -85,7 +85,6 @@ INCLUDES  = -I. \
 	-I../src \
 	-I$(TARGET_DIR) \
 	-I$(QPCPP)/include \
-	-I$(QPCPP)/src \
 	-I$(QP_PORT_DIR) \
 	-I$(QPCPP)/3rd_party/CMSIS/Include \
 	-I$(QPCPP)/3rd_party/nucleo-l053r8
@@ -107,7 +106,7 @@ CPP_SRCS := \
 	test_qutest.cpp
 
 OUTPUT    := $(PROJECT)
-LD_SCRIPT := $(TARGET_DIR)/test.ld
+LD_SCRIPT := $(TARGET_DIR)\qutest.ld
 
 QP_SRCS := \
 	qep_hsm.cpp \
@@ -127,7 +126,7 @@ QP_SRCS := \
 	qs_rx.cpp \
 	qs_fp.cpp \
 	qutest.cpp \
-	qutest_port.cpp
+	qutest_cpp.cpp
 
 QP_ASMS :=
 
@@ -135,7 +134,7 @@ LIB_DIRS  :=
 LIBS      :=
 
 # defines
-DEFINES   :=
+DEFINES   := -DSTM32L053xx
 
 # ARM CPU, ARCH, FPU, and Float-ABI types...
 # ARM_CPU:   [cortex-m0 | cortex-m0plus | cortex-m1 | cortex-m3 | cortex-m4]
@@ -166,11 +165,11 @@ LINK  := $(GNU_ARM)/bin/arm-none-eabi-g++
 BIN   := $(GNU_ARM)/bin/arm-none-eabi-objcopy
 
 #-----------------------------------------------------------------------------
-# NOTE: The following symbol USB assumes that the NUCLEO board
+# NOTE: The symbol USB must be provided for the NUCLEO board
 # has enumerated as USB drive f:
 #
 ifeq ($(USB),)
-USB := f:
+$(error USB drive not provided for the NUCLEO board.)
 endif
 
 ##############################################################################
@@ -190,8 +189,6 @@ SLEEP := sleep
 ifeq ("$(wildcard $(QUTEST))","")
 QUTEST := python3 $(QTOOLS)/qutest/qutest.py
 endif
-
-TESTS  := *.py
 
 #-----------------------------------------------------------------------------
 # build options
@@ -252,18 +249,18 @@ endif
 
 $(TARGET_BIN) : $(TARGET_ELF)
 	$(BIN) -O binary $< $@
+	$(CP) $@ $(USB)
+	$(SLEEP) 2
 
 $(TARGET_ELF) : $(ASM_OBJS_EXT) $(C_OBJS_EXT) $(CPP_OBJS_EXT)
-	$(CPP) $(CPPFLAGS) $(QPCPP)/include/qstamp.cpp -o $(BIN_DIR)/qstamp.o
+	$(CPP) $(CPPFLAGS) $(QPCPP)/src/qs/qstamp.cpp -o $(BIN_DIR)/qstamp.o
 	$(LINK) $(LINKFLAGS) -o $@ $^ $(BIN_DIR)/qstamp.o $(LIBS)
 
 flash :
 	$(CP) $(TARGET_BIN) $(USB)
 
 run : $(TARGET_BIN)
-	$(CP) $< $(USB)
-	$(SLEEP) 2
-	$(QUTEST) $(TESTS) $(TARGET_EXE) $(HOST)
+	$(QUTEST) -q$(QSPY) -l$(LOG) -o$(OPT) -- $(TESTS)
 
 $(BIN_DIR)/%.d : %.c
 	$(CC) -MM -MT $(@:.d=.o) $(CFLAGS) $< > $@

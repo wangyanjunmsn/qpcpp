@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"  // QP/C++ framework API
 #include "blinky.hpp" // Blinky application
 #include "bsp.hpp"    // Board Support Package interface
@@ -50,13 +50,13 @@ void BSP::init() {
 }
 //............................................................................
 void BSP::ledOff(void) {
-    QS_BEGIN_ID(LED, AO_Blinky->m_prio)
+    QS_BEGIN_ID(LED, AO_Blinky->getPrio())
        QS_U8(1, 0);
     QS_END()
 }
 //............................................................................
 void BSP::ledOn(void) {
-    QS_BEGIN_ID(LED, AO_Blinky->m_prio)
+    QS_BEGIN_ID(LED, AO_Blinky->getPrio())
        QS_U8(1, 1);
     QS_END()
 }

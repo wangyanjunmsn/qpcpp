@@ -3,6 +3,7 @@
 *.d
 *.lib
 *.a
+*.bin
 *.elf
 *.err
 *.hex
@@ -23,6 +24,7 @@
 *.pdb
 *.ncb
 *.suo
+*.sdf
 *.chw
 *.sfr
 *.ewt
@@ -30,15 +32,15 @@
 *.avrsuo
 *.Debug
 *.Release
-lint*.txt
-*.Miro
 *.bak
-*.qlc
-JLink*.*
+.qpcpp
 version-*
-metrics.dox
+JLink*.*
 
 html/
+latex/
+cert-pack/
+cert-latex/
 test_priv/
 dbg/
 rel/
@@ -49,7 +51,6 @@ build_spy/
 settings/
 .settings/
 targetConfigs/
-3rd_party/emWin/
 
 Debug/
 Release/

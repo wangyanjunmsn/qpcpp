@@ -1,4 +1,4 @@
-//****************************************************************************
+//============================================================================
 // Product: "Blinky" on LAUCHXL2-TMS570LS12 board, cooperative QV kernel
 // Last Updated for Version: 5.7.0
 // Date of the Last Update:  2016-08-31
@@ -30,7 +30,7 @@
 // Contact information:
 // https://state-machine.com
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "blinky.hpp"
 #include "bsp.hpp"
@@ -79,7 +79,7 @@ extern "C" {
 //
 void rtiNotification(uint32 notification) {
     if (notification == rtiNOTIFICATION_COMPARE0) {
-        QP::QF::TICK_X(0U, nullptr); // process time events for rate 0
+        QP::QTimeEvt::TICK_X(0U, nullptr); // process time events for rate 0
     }
 }
 
@@ -147,7 +147,7 @@ void QV::onIdle(void) { // CATION: called with interrupts DISABLED, NOTE01
 }
 
 //............................................................................
-extern "C" Q_NORETURN Q_onAssert(char const * const module, int_t const loc) {
+extern "C" Q_NORETURN Q_onError(char const * const module, int_t const loc) {
     //
     // NOTE: add here your application-specific error handling
     //
@@ -157,7 +157,7 @@ extern "C" Q_NORETURN Q_onAssert(char const * const module, int_t const loc) {
     systemREG1->SYSECR = 0; // perform system reset
 }
 
-///***************************************************************************
+//============================================================================
 // NOTE00:
 // The FIQ-type interrupts are never disabled in this QP port, therefore
 // they can always preempt any code, including the IRQ-handlers (ISRs).

@@ -1,152 +1,123 @@
-/**
-* @file
-* @brief QXK/C++ port to ARM Cortex-M, IAR-ARM toolset
-* @cond
-******************************************************************************
-* Last updated for version 6.9.1
-* Last updated on  2020-10-11
-*
-*                    Q u a n t u m  L e a P s
-*                    ------------------------
-*                    Modern Embedded Software
-*
-* Copyright (C) 2005-2020 Quantum Leaps, LLC. All rights reserved.
-*
-* This program is open source software: you can redistribute it and/or
-* modify it under the terms of the GNU General Public License as published
-* by the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* Alternatively, this program may be distributed and modified under the
-* terms of Quantum Leaps commercial licenses, which expressly supersede
-* the GNU General Public License and are specifically designed for
-* licensees interested in retaining the proprietary status of their code.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program. If not, see <www.gnu.org/licenses/>.
-*
-* Contact information:
-* <www.state-machine.com/licensing>
-* <info@state-machine.com>
-******************************************************************************
-* @endcond
-*/
-/* This QXK port is part of the interanl QP implementation */
+//============================================================================
+// QP/C++ Real-Time Embedded Framework (RTEF)
+//
+//                   Q u a n t u m  L e a P s
+//                   ------------------------
+//                   Modern Embedded Software
+//
+// Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-QL-commercial
+//
+// This software is dual-licensed under the terms of the open source GNU
+// General Public License version 3 (or any later version), or alternatively,
+// under the terms of one of the closed source Quantum Leaps commercial
+// licenses.
+//
+// The terms of the open source GNU General Public License version 3
+// can be found at: <www.gnu.org/licenses/gpl-3.0>
+//
+// The terms of the closed source Quantum Leaps commercial licenses
+// can be found at: <www.state-machine.com/licensing>
+//
+// Redistributions in source code must retain this top-level comment block.
+// Plagiarizing this software to sidestep the license obligations is illegal.
+//
+// Contact information:
+// <www.state-machine.com>
+// <info@state-machine.com>
+//============================================================================
+//! @date Last updated on: 2023-10-30
+//! @version Last updated for: @ref qpcpp_7_3_1
+//!
+//! @file
+//! @brief QXK/C++ port to ARM Cortex-M, IAR-ARM
+
 #define QP_IMPL 1U
-#include "qf_port.hpp"
-#include "qxk_pkg.hpp"
+#include "qp_port.hpp"
+#include "qp_pkg.hpp"
+#include "qsafe.h"        // QP Functional Safety (FuSa) System
 
-extern "C" {
+#include <cstddef>        // for offsetof()
 
-/* prototypes --------------------------------------------------------------*/
-void PendSV_Handler(void);
-void NMI_Handler(void);
+//============================================================================
+// NOTE: keep in synch with struct QXK_Attr in "qxk.hpp" !!!
+#define QXK_CURR       0
+#define QXK_NEXT       4
+#define QXK_ACT_PRIO   12
 
-#define SCnSCB_ICTR  ((uint32_t volatile *)0xE000E004)
-#define SCB_SYSPRI   ((uint32_t volatile *)0xE000ED14)
-#define NVIC_IP      ((uint32_t volatile *)0xE000E400)
-#define NVIC_ICSR    0xE000ED04
+// make sure that the offsets match the QXK declaration in "qxk.hpp"
+static_assert(QXK_CURR == offsetof(QXK_Attr, curr),
+              "QXK_Attr.curr at unexpected offset");
+static_assert(QXK_NEXT == offsetof(QXK_Attr, next),
+              "QXK_Attr.next at unexpected offset");
+static_assert(QXK_ACT_PRIO == offsetof(QXK_Attr, actPrio),
+              "QXK_Attr.actPrio at unexpected offset");
 
-/*
-* Initialize the exception priorities and IRQ priorities to safe values.
-*
-* Description:
-* On Cortex-M3/M4/M7, this QXK port disables interrupts by means of the
-* BASEPRI register. However, this method cannot disable interrupt
-* priority zero, which is the default for all interrupts out of reset.
-* The following code changes the SysTick priority and all IRQ priorities
-* to the safe value QF_BASEPRI, wich the QF critical section can disable.
-* This avoids breaching of the QF critical sections in case the
-* application programmer forgets to explicitly set priorities of all
-* "kernel aware" interrupts.
-*
-* The interrupt priorities established in QXK_init() can be later
-* changed by the application-level code.
-*/
-void QXK_init(void) {
+// offsets within struct QActive; NOTE: keep in synch with "qp.hpp" !!!
+#define QACTIVE_PRIO   12
+#define QACTIVE_OSOBJ  20
 
-#if (__ARM_ARCH != 6) /* NOT Cortex-M0/M0+/M1(v6-M, v6S-M) */
 
-    uint32_t n;
+// helper macros to "stringify" values
+#define VAL(x) #x
+#define STRINGIFY(x) VAL(x)
 
-    /* set exception priorities to QF_BASEPRI...
-    * SCB_SYSPRI1: Usage-fault, Bus-fault, Memory-fault
-    */
-    SCB_SYSPRI[1] |= (QF_BASEPRI << 16) | (QF_BASEPRI << 8) | QF_BASEPRI;
+//============================================================================
+namespace QP {
 
-    /* SCB_SYSPRI2: SVCall */
-    SCB_SYSPRI[2] |= (QF_BASEPRI << 24);
-
-    /* SCB_SYSPRI3:  SysTick, PendSV, Debug */
-    SCB_SYSPRI[3] |= (QF_BASEPRI << 24) | (QF_BASEPRI << 16) | QF_BASEPRI;
-
-    /* set all implemented IRQ priories to QF_BASEPRI... */
-    n = 8U + ((*SCnSCB_ICTR & 0x7U) << 3); /* (# NVIC_PRIO registers)/4 */
-    do {
-        --n;
-        NVIC_IP[n] = (QF_BASEPRI << 24) | (QF_BASEPRI << 16)
-                     | (QF_BASEPRI << 8) | QF_BASEPRI;
-    } while (n != 0);
-
-#endif /* NOT Cortex-M0/M0+/M1(v6-M, v6S-M) */
-
-    /* SCB_SYSPRI3: PendSV set to the lowest priority 0xFF */
-    SCB_SYSPRI[3] |= (0xFFU << 16);
-}
-
-/*****************************************************************************
-* Initialize the private stack of an extended QXK thread.
-*
-* NOTE: the function aligns the stack to the 8-byte boundary for compatibility
-* with the AAPCS. Additionally, the function pre-fills the stack with the
-* known bit pattern (0xDEADBEEF).
-*
-* NOTE: QXK_stackInit_() must be called before the QXK kernel is made aware
-* of this thread. In that case the kernel cannot use the thread yet, so no
-* critical section is needed.
-*****************************************************************************/
-void QXK_stackInit_(void *thr, QP::QXThreadHandler const handler,
+// Initialize the private stack of an extended QXK thread.
+//
+// NOTE
+// The function aligns the stack to the 8-byte boundary for compatibility
+// with the AAPCS. Additionally, the function pre-fills the stack with the
+// known bit pattern (0xDEADBEEF).
+//
+// NOTE: QXK_stackInit_() must be called before the QXK kernel is made aware
+// of this thread. In that case the kernel cannot use the thread yet, so no
+// critical section is needed.
+void QXThread::stackInit_(QP::QXThreadHandler const handler,
              void * const stkSto, std::uint_fast16_t const stkSize) noexcept
 {
-    /* round down the stack top to the 8-byte boundary
-    * NOTE: ARM Cortex-M stack grows down from hi -> low memory
-    */
+    // make sure that the offsets match the QActive declaration in "qf.hpp"
+    static_assert(QACTIVE_OSOBJ == offsetof(QP::QActive, m_osObject),
+               "QActive.m_osObject at unexpected offset");
+    static_assert(QACTIVE_PRIO  == offsetof(QP::QActive, m_prio),
+               "QActive.m_prio at unexpected offset");
+
+    // round down the stack top to the 8-byte boundary
+    // NOTE: ARM Cortex-M stack grows down from hi -> low memory
     std::uint32_t *sp = (std::uint32_t *)(
         (((std::uint32_t)stkSto + stkSize) >> 3U) << 3U);
     std::uint32_t *sp_limit;
 
-    /* synthesize the ARM Cortex-M exception stack frame...*/
-    *(--sp) = (1U << 24);    /* xPSR  (just the THUMB bit) */
-    *(--sp) = (std::uint32_t)handler;         /* PC (the thread handler) */
-    *(--sp) = (std::uint32_t)&QXK_threadRet_; /* LR (return from thread) */
-    *(--sp) = 0x0000000CU;   /* R12 */
-    *(--sp) = 0x00000003U;   /* R3  */
-    *(--sp) = 0x00000002U;   /* R2  */
-    *(--sp) = 0x00000001U;   /* R1  */
-    *(--sp) = (std::uint32_t)thr; /* R0 parameter to the handler (thread object) */
-    *(--sp) = 0x0000000BU;   /* R11 */
-    *(--sp) = 0x0000000AU;   /* R10 */
-    *(--sp) = 0x00000009U;   /* R9  */
-    *(--sp) = 0x00000008U;   /* R8  */
-    *(--sp) = 0x00000007U;   /* R7  */
-    *(--sp) = 0x00000006U;   /* R6  */
-    *(--sp) = 0x00000005U;   /* R5  */
-    *(--sp) = 0x00000004U;   /* R4  */
+    // synthesize the ARM Cortex-M exception stack frame...
+    *(--sp) = (1U << 24);    // xPSR  (just the THUMB bit)
+    *(--sp) = (std::uint32_t)handler;          // PC (the thread handler)
+    *(--sp) = (std::uint32_t)&QXK_threadExit_; // LR (exit from thread)
+    *(--sp) = 0x0000000CU;   // R12
+    *(--sp) = 0x00000003U;   // R3
+    *(--sp) = 0x00000002U;   // R2
+    *(--sp) = 0x00000001U;   // R1
+    *(--sp) = (std::uint32_t)this; // R0 parameter to handler (thread object)
+    *(--sp) = 0x0000000BU;   // R11
+    *(--sp) = 0x0000000AU;   // R10
+    *(--sp) = 0x00000009U;   // R9
+    *(--sp) = 0x00000008U;   // R8
+    *(--sp) = 0x00000007U;   // R7
+    *(--sp) = 0x00000006U;   // R6
+    *(--sp) = 0x00000005U;   // R5
+    *(--sp) = 0x00000004U;   // R4
 
-#if (__ARM_FP != 0)          /* if VFP available... */
-    *(--sp) = 0xFFFFFFFDU;   /* exception return with VFP state */
-    *(--sp) = 0xAAAAAAAAU;   /* stack "aligner" */
-#endif                       /* VFP available */
+#ifdef __ARM_FP         //--------- if VFP available...
+    *(--sp) = 0xFFFFFFFDU;   // exception return with VFP state
+    *(--sp) = 0xAAAAAAAAU;   // stack "aligner"
+#endif                       // VFP available
 
-    /* save the top of the stack in the thread's attibute */
-    static_cast<QP::QActive *>(thr)->m_osObject = sp;
+    // save the top of the stack in the thread's attribute
+    m_osObject = sp;
 
-    /* pre-fill the unused part of the stack with 0xDEADBEEF */
+    // pre-fill the unused part of the stack with 0xDEADBEEF
     sp_limit = (std::uint32_t *)(
         ((((std::uint32_t)stkSto - 1U) >> 3U) + 1U) << 3U);
     for (; sp >= sp_limit; --sp) {
@@ -154,458 +125,526 @@ void QXK_stackInit_(void *thr, QP::QXThreadHandler const handler,
     }
 }
 
-/* NOTE: keep in synch with the QXK_Attr struct in "qxk.hpp" !!! */
-#define QXK_CURR       0
-#define QXK_NEXT       4
-#define QXK_ACT_PRIO   8
-#define QXK_IDLE_THR   12
+} // namespace QP
 
-/* NOTE: keep in synch with the QXK_Attr struct in "qxk.hpp" !!! */
-/*Q_ASSERT_COMPILE(QXK_CURR == offsetof(QXK_Attr, curr));*/
-/*Q_ASSERT_COMPILE(QXK_NEXT == offsetof(QXK_Attr, next));*/
-/*Q_ASSERT_COMPILE(QXK_ACT_PRIO == offsetof(QXK_Attr, actPrio));*/
+//============================================================================
+extern "C" {
 
-/* NOTE: keep in synch with the QActive struct in "qf.hpp/qxk.hpp" !!! */
-#define QACTIVE_OSOBJ    28
-#define QACTIVE_DYN_PRIO 36
+// prototypes ----------------------------------------------------------------
+void PendSV_Handler(void);
+#ifdef QXK_USE_IRQ_HANDLER          // if use IRQ...
+void QXK_USE_IRQ_HANDLER(void);
+#else                               // use default (NMI)
+void NMI_Handler(void);
+#endif
 
-/* NOTE: keep in synch with the QActive struct in "qf.hpp/qxk.hpp" !!! */
-/*Q_ASSERT_COMPILE(QACTIVE_OSOBJ == offsetof(QActive, osObject));*/
-/*Q_ASSERT_COMPILE(QACTIVE_DYN_PRIO == offsetof(QActive, dynPrio));*/
+#define SCB_SYSPRI   ((uint32_t volatile *)0xE000ED18U)
+#define NVIC_EN      ((uint32_t volatile *)0xE000E100U)
+#define NVIC_IP      ((uint32_t volatile *)0xE000E400U)
+#define SCB_CPACR   *((uint32_t volatile *)0xE000ED88U)
+#define FPU_FPCCR   *((uint32_t volatile *)0xE000EF34U)
+#define NVIC_PEND    0xE000E200
+#define SCB_ICSR     0xE000ED04
 
-/* helper macros to "stringify" values */
-#define VAL(x) #x
-#define STRINGIFY(x) VAL(x)
+//............................................................................
+// Initialize the exception priorities and IRQ priorities to safe values.
+//
+// Description:
+// On ARMv7-M or higher, this QXK port disables interrupts by means of the
+// BASEPRI register. However, this method cannot disable interrupt
+// priority zero, which is the default for all interrupts out of reset.
+// The following code changes the SysTick priority and all IRQ priorities
+// to the safe value QF_BASEPRI, which the QF critical section can disable.
+// This avoids breaching of the QF critical sections in case the
+// application programmer forgets to explicitly set priorities of all
+// "kernel aware" interrupts.
+//
+// The interrupt priorities established in QXK_init() can be later
+// changed by the application-level code.
+void QXK_init(void) {
 
-/*****************************************************************************
-* The PendSV_Handler exception handler is used for handling context switch
-* and asynchronous preemption in QXK. The use of the PendSV exception is
-* the recommended and most efficient method for performing context switches
-* with ARM Cortex-M.
-*
-* The PendSV exception should have the lowest priority in the whole system
-* (0xFF, see QXK_init). All other exceptions and interrupts should have higher
-* priority. For example, for NVIC with 2 priority bits all interrupts and
-* exceptions must have numerical value of priority lower than 0xC0. In this
-* case the interrupt priority levels available to your applications are (in
-* the order from the lowest urgency to the highest urgency): 0x80, 0x40, 0x00.
-*
-* Also, *all* "kernel aware" ISRs in the QXK application must call the
-* QXK_ISR_EXIT() macro, which triggers PendSV when it detects a need for
-* a context switch or asynchronous preemption.
-*
-* Due to tail-chaining and its lowest priority, the PendSV exception will be
-* entered immediately after the exit from the *last* nested interrupt (or
-* exception). In QXK, this is exactly the time when the QXK activator needs to
-* handle the asynchronous preemption.
-*****************************************************************************/
+#if (__ARM_ARCH != 6)   //--------- if ARMv7-M and higher...
+
+    // SCB_SYSPRI[2]:  SysTick
+    SCB_SYSPRI[2] = (SCB_SYSPRI[2] | (QF_BASEPRI << 24U));
+
+    // set all 240 possible IRQ priories to QF_BASEPRI...
+    for (uint_fast8_t n = 0U; n < (240U/sizeof(uint32_t)); ++n) {
+        NVIC_IP[n] = (QF_BASEPRI << 24U) | (QF_BASEPRI << 16U)
+                     | (QF_BASEPRI << 8U) | QF_BASEPRI;
+    }
+
+#endif                  //--------- ARMv7-M or higher
+
+    // SCB_SYSPRI[2]: PendSV set to priority 0xFF (lowest)
+    SCB_SYSPRI[2] = (SCB_SYSPRI[2] | (0xFFU << 16U));
+
+#ifdef QXK_USE_IRQ_NUM   //--------- QXK IRQ specified?
+    // The QXK port is configured to use a given ARM Cortex-M IRQ #
+    // to return to thread mode (default is to use the NMI exception)
+    NVIC_IP[QXK_USE_IRQ_NUM] = 0U; // priority 0 (highest)
+    NVIC_EN[QXK_USE_IRQ_NUM >> 5U] = (1U << (QXK_USE_IRQ_NUM & 0x1FU));
+#endif                  //--------- QXK IRQ specified
+
+#ifdef __ARM_FP         //--------- if VFP available...
+    // make sure that the FPU is enabled by seting CP10 & CP11 Full Access
+    SCB_CPACR = (SCB_CPACR | ((3UL << 20U) | (3UL << 22U)));
+
+    // FPU automatic state preservation (ASPEN) lazy stacking (LSPEN)
+    FPU_FPCCR = (FPU_FPCCR | (1U << 30U) | (1U << 31U));
+#endif                  //--------- VFP available
+}
+
+//============================================================================
+// The PendSV_Handler exception handler is used for performing asynchronous
+// preemption in QXK. The use of the PendSV exception is the recommended and
+// most efficient method for performing context switches in ARM Cortex-M.
+//
+// The PendSV exception should have the lowest interrupt priority in the system
+// (0xFF, see QXK_init()). All other exceptions and interrupts should have
+// higher interrupt priority.
+//
+// Also, *all* "kernel aware" ISRs in the QXK application must call the
+// QXK_ISR_EXIT() macro, which triggers PendSV when it detects a need for
+// asynchronous preemption.
+//
+// Due to tail-chaining and its lowest priority, the PendSV exception will be
+// entered immediately after the exit from the *last* nested interrupt (or
+// exception). In QXK, this is exactly the time when the QXK activator needs to
+// handle the asynchronous preemption.
 __stackless
 void PendSV_Handler(void) {
-__asm (
+__asm volatile (
 
-    /* Prepare some constants before entering a critical section... */
-    "  LDR     r3,=QXK_attr_    \n"
-    "  LDR     r2,=" STRINGIFY(NVIC_ICSR) "\n" /* Interrupt Control and State */
-    "  MOVS    r1,#1            \n"
-    "  LSLS    r1,r1,#27        \n" /* r0 := (1 << 27) (UNPENDSVSET bit) */
-
-    /*<<<<<<<<<<<<<<<<<<<<<<< CRITICAL SECTION BEGIN <<<<<<<<<<<<<<<<<<<<<<<<*/
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  CPSID   i                \n" /* disable interrupts (set PRIMASK) */
-#else
+    //<<<<<<<<<<<<<<<<<<<<<<< CRITICAL SECTION BEGIN <<<<<<<<<<<<<<<<<<<<<<<<
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  CPSID   i                \n" // disable interrupts (set PRIMASK)
+#else                               // ARMv7-M or higher
     "  MOVS    r0,#" STRINGIFY(QF_BASEPRI) "\n"
-    "  CPSID   i                \n" /* selectively disable interrutps with BASEPRI */
-    "  MSR     BASEPRI,r0       \n" /* apply the workaround the Cortex-M7 erraturm */
-    "  CPSIE   i                \n" /* 837070, see SDEN-1068427. */
-#endif                              /* M3/M4/M7 */
+    "  CPSID   i                \n" // selectively disable interrupts with BASEPRI
+    "  MSR     BASEPRI,r0       \n" // apply the workaround the Cortex-M7 erratum
+    "  CPSIE   i                \n" // 837070, see SDEN-1068427.
+#endif                              // ARMv7-M or higher
 
-    /* The PendSV exception handler can be preempted by an interrupt,
-    * which might pend PendSV exception again. The following write to
-    * ICSR[27] un-pends any such spurious instance of PendSV.
-    */
-    "  STR     r1,[r2]          \n" /* ICSR[27] := 1 (unpend PendSV) */
+#ifdef QF_MEM_ISOLATE
+    "  PUSH    {r0,lr}          \n" // save the "aligner" and the EXC_RETURN value
+    "  LDR     r0,=QF_onMemSys  \n"
+    "  BLX     r0               \n" // call QF_onMemSys()
+    "  POP     {r0,r1}          \n" // restore the aligner + lr into r1
+    "  MOV     lr,r1            \n" // restore EXC_RETURN into lr
+#endif
 
-    /* Check QXK_attr_.next, which contains the pointer to the next thread
-    * to run, which is set in QXK_ISR_EXIT(). This pointer must not be NULL.
-    */
-    "  LDR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" /* r1 := QXK_attr_.next */
-    "  CMP     r0,#0            \n" /* is (QXK_attr_.next == 0)? */
-    "  BEQ     PendSV_return    \n" /* branch if (QXK_attr_.next == 0) */
+    // The PendSV exception handler can be preempted by an interrupt,
+    // which might pend PendSV exception again. The following write to
+    // ICSR[27] un-pends any such spurious instance of PendSV.
+    "  MOVS    r1,#1            \n"
+    "  LSLS    r1,r1,#27        \n" // r0 := (1 << 27) (UNPENDSVSET bit)
+    "  LDR     r2,=" STRINGIFY(SCB_ICSR) "\n" // Interrupt Control and State
+    "  STR     r1,[r2]          \n" // ICSR[27] := 1 (unpend PendSV)
 
-    /* Load pointers into registers... */
-    "  MOV     r12,r0           \n" /* save QXK_attr_.next in r12 */
-    "  LDR     r2,[r0,#" STRINGIFY(QACTIVE_OSOBJ) "]\n" /* r2 := QXK_attr_.next->osObject */
-    "  LDR     r1,[r3,#" STRINGIFY(QXK_CURR) "]\n" /* r1 := QXK_attr_.curr */
+    // Check QXK_priv_.next, which contains the pointer to the next thread
+    // to run, which is set in QXK_ISR_EXIT(). This pointer must not be NULL.
+    "  LDR     r3,=QXK_priv_    \n"
+    "  LDR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" // r1 := QXK_priv_.next
+    "  CMP     r0,#0            \n" // is (QXK_priv_.next == 0)?
+    "  BEQ     PendSV_return    \n" // branch if (QXK_priv_.next == 0)
 
-    "  CMP     r1,#0            \n" /* (QXK_attr_.curr != 0)? */
-    "  BNE     PendSV_save_ex   \n" /* branch if (current thread is extended) */
+    // Load pointers into registers...
+    "  MOV     r12,r0           \n" // save QXK_priv_.next in r12
+    "  LDR     r2,[r0,#" STRINGIFY(QACTIVE_OSOBJ) "]\n" // r2 := QXK_priv_.next->osObject
+    "  LDR     r1,[r3,#" STRINGIFY(QXK_CURR) "]\n" // r1 := QXK_priv_.curr
 
-    "  CMP     r2,#0            \n" /* (QXK_attr_.next->osObject != 0)? */
-    "  BNE     PendSV_save_ao   \n" /* branch if (next tread is extended) */
+    "  CMP     r1,#0            \n" // (QXK_priv_.curr != 0)?
+    "  BNE     PendSV_save_ex   \n" // branch if (current thread is extended)
+
+    "  CMP     r2,#0            \n" // (QXK_priv_.next->osObject != 0)?
+    "  BNE     PendSV_save_ao   \n" // branch if (next tread is extended)
 
     "PendSV_activate:           \n"
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  PUSH    {r0,lr}          \n" /* ... push lr (EXC_RETURN) plus stack-aligner */
-#endif                              /* VFP available */
-    /* The QXK activator must be called in a thread context, while this code
-    * executes in the handler contex of the PendSV exception. The switch
-    * to the Thread mode is accomplished by returning from PendSV using
-    * a fabricated exception stack frame, where the return address is
-    * QXK_activate_().
-    *
-    * NOTE: the QXK activator is called with interrupts DISABLED and also
-    * it returns with interrupts DISABLED.
-    */
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  TST     lr,#(1 << 4)     \n" // is it return with the VFP exception frame?
+    "  IT      EQ               \n" // if lr[4] is zero...
+    "  VSTMDBEQ sp!,{s16-s31}   \n" // ... save VFP registers s16..s31
+    "  PUSH    {r0,lr}          \n" // save the "aligner" and the EXC_RETURN value
+#endif                              // VFP available
+    // The QXK activator must be called in a thread context, while this code
+    // executes in the handler context of the PendSV exception. The switch
+    // to the Thread mode is accomplished by returning from PendSV using
+    // a fabricated exception stack frame, where the return address is
+    // QXK_activate_().
+    //
+    // NOTE: the QXK activator is called with interrupts DISABLED and also
+    // it returns with interrupts DISABLED.
     "  MOVS    r3,#1            \n"
-    "  LSLS    r3,r3,#24        \n" /* r3 := (1 << 24), set the T bit  (new xpsr) */
-    "  LDR     r2,=QXK_activate_\n" /* address of QXK_activate_ */
-    "  SUBS    r2,r2,#1         \n" /* align Thumb-address at halfword (new pc) */
-    "  LDR     r1,=QXK_thread_ret\n" /* return address after the call   (new lr) */
+    "  LSLS    r3,r3,#24        \n" // r3 := (1 << 24), set T bit  (new xpsr)
+    "  LDR     r2,=QXK_activate_\n" // address of QXK_activate_
+    "  SUBS    r2,r2,#1         \n" // align Thumb-address at half-word (new pc)
+    "  LDR     r1,=QXK_thread_ret\n" // return address after the call   (new lr)
 
-    "  SUB     sp,sp,#(8*4)     \n" /* reserve space for exception stack frame */
-    "  ADD     r0,sp,#(5*4)     \n" /* r0 := 5 registers below the top of stack */
-    "  STM     r0!,{r1-r3}      \n" /* save xpsr,pc,lr */
+    "  SUB     sp,sp,#(8*4)     \n" // reserve space for exception stack frame
+    "  ADD     r0,sp,#(5*4)     \n" // r0 := 5 registers below the top of stack
+    "  STM     r0!,{r1-r3}      \n" // save xpsr,pc,lr
 
     "  MOVS    r0,#6            \n"
-    "  MVNS    r0,r0            \n" /* r0 := ~6 == 0xFFFFFFF9 */
-#if (__ARM_ARCH != 6)               /* NOT Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  DSB                      \n" /* ARM Erratum 838869 */
-#endif                              /* NOT (v6-M, v6S-M) */
-    "  BX      r0               \n" /* exception-return to the QXK activator */
+    "  MVNS    r0,r0            \n" // r0 := ~6 == 0xFFFFFFF9
+#if (__ARM_ARCH != 6)               // ARMv7-M or higher
+    "  DSB                      \n" // ARM Erratum 838869
+#endif                              // ARMv7-M or higher
+    "  BX      r0               \n" // exception-return to the QXK activator
 
-    /*=========================================================================
-    * Saving AO-thread before crossing to eXtended-thread
-    * expected register contents:
-    * r0  -> QXK_attr_.next
-    * r1  -> QXK_attr_.curr
-    * r2  -> QXK_attr_.next->osObject (SP)
-    * r3  -> &QXK_attr_
-    * r12 -> QXK_attr_.next
-    */
+    //========================================================================
+    // Saving AO-thread before crossing to eXtended-thread
+    // expected register contents:
+    // r0  -> QXK_priv_.next / basic-thread
+    // r1  -> QXK_priv_.curr / basic-thread
+    // r2  -> QXK_priv_.next->osObject (SP)
+    // r3  -> &QXK_priv_
+    // r12 -> QXK_priv_.next / basic-thread
     "PendSV_save_ao:            \n"
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  SUB     sp,sp,#(8*4)     \n" /* make room for 8 registers r4-r11 */
-    "  MOV     r0,sp            \n" /* r0 := temporary stack pointer */
-    "  STMIA   r0!,{r4-r7}      \n" /* save the low registers */
-    "  MOV     r4,r8            \n" /* move the high registers to low registers... */
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  SUB     sp,sp,#(8*4)     \n" // make room for 8 registers r4-r11
+    "  MOV     r0,sp            \n" // r0 := temporary stack pointer
+    "  STMIA   r0!,{r4-r7}      \n" // save the low registers
+    "  MOV     r4,r8            \n" // move the high registers to low registers...
     "  MOV     r5,r9            \n"
     "  MOV     r6,r10           \n"
     "  MOV     r7,r11           \n"
-    "  STMIA   r0!,{r4-r7}      \n" /* save the high registers */
-    "  MOV     r0,r12           \n" /* restore QXK_attr_.next in r0 */
-#else                               /* M3/M4/M7 */
-    "  PUSH    {r4-r11}         \n" /* save r4-r11 on top of the exception frame */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  TST     lr,#(1 << 4)     \n" /* is it return with the VFP exception frame? */
-    "  IT      EQ               \n" /* if lr[4] is zero... */
-    "  VSTMDBEQ sp!,{s16-s31}   \n" /* ... save VFP registers s16..s31 */
-
-    "  PUSH    {r0,lr}          \n" /* save the "aligner" and the EXC_RETURN value */
-#endif                              /* VFP available */
-#endif                              /* M3/M4/M7 */
+    "  STMIA   r0!,{r4-r7}      \n" // save the high registers
+    "  MOV     r0,r12           \n" // restore QXK_priv_.next in r0
+#else                               // ARMv7-M or higher
+    "  PUSH    {r4-r11}         \n" // save r4-r11 on top of the exception frame
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  TST     lr,#(1 << 4)     \n" // is it return with the VFP exception frame?
+    "  IT      EQ               \n" // if lr[4] is zero...
+    "  VSTMDBEQ sp!,{s16-s31}   \n" // ... save VFP registers s16..s31
+    "  PUSH    {r0,lr}          \n" // save the "aligner" and the EXC_RETURN value
+#endif                              // VFP available
+#endif                              // ARMv7-M or higher
 
     "  CMP     r2,#0            \n"
-    "  BNE     PendSV_restore_ex\n" /* branch if (QXK_attr_.next->osObject != 0) */
-    /* otherwise continue to restoring next AO-thread... */
+    "  BNE     PendSV_restore_ex\n" // branch if (QXK_priv_.next->osObject != 0)
+    // otherwise continue to restoring next AO-thread...
 
-    /*-------------------------------------------------------------------------
-    * Restoring AO-thread after crossing from eXtended-thread
-    * expected register contents:
-    * r1  -> QXK_attr_.curr
-    * r2  -> QXK_attr_.next->osObject (SP)
-    * r3  -> &QXK_attr_
-    * r12 -> QXK_attr_.next
-    */
+    //------------------------------------------------------------------------
+    // Restoring AO-thread after crossing from eXtended-thread
+    // expected register contents:
+    // r1  -> QXK_priv_.curr / basic-thread
+    // r2  -> QXK_priv_.next->osObject (SP)
+    // r3  -> &QXK_priv_
+    // r12 -> QXK_priv_.next / basic-thread
     "PendSV_restore_ao:         \n"
-    "  MOVS    r0,#0            \n"
-    "  STR     r0,[r3,#" STRINGIFY(QXK_CURR) "]\n" /* QXK_attr_.curr := 0 */
-    /* don't clear QXK_attr_.next, as it might be needed for AO activation */
+    // don NOT clear QXK_priv_.curr or QXK_priv_.next,
+    // as they might be needed for AO activation
 
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  MOV     r0,sp            \n" /* r0 := top of stack */
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  MOV     r0,sp            \n" // r0 := top of stack
     "  MOV     r2,r0            \n"
-    "  ADDS    r2,r2,#(4*4)     \n" /* point r2 to the 4 high registers r7-r11 */
-    "  LDMIA   r2!,{r4-r7}      \n" /* pop the 4 high registers into low registers */
-    "  MOV     r8,r4            \n" /* move low registers into high registers */
+    "  ADDS    r2,r2,#(4*4)     \n" // point r2 to the 4 high registers r7-r11
+    "  LDMIA   r2!,{r4-r7}      \n" // pop the 4 high registers into low registers
+    "  MOV     r8,r4            \n" // move low registers into high registers
     "  MOV     r9,r5            \n"
     "  MOV     r10,r6           \n"
     "  MOV     r11,r7           \n"
-    "  LDMIA   r0!,{r4-r7}      \n" /* pop the low registers */
-    "  ADD     sp,sp,#(8*4)     \n" /* remove 8 registers from the stack */
+    "  LDMIA   r0!,{r4-r7}      \n" // pop the low registers
+    "  ADD     sp,sp,#(8*4)     \n" // remove 8 registers from the stack
 
     "  MOVS    r2,#6            \n"
-    "  MVNS    r2,r2            \n" /* r2 := ~6 == 0xFFFFFFF9 */
-    "  MOV     lr,r2            \n" /* make sure MSP is used */
-#else                               /* M3/M4/M7 */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  POP     {r0,lr}          \n" /* restore alighner and EXC_RETURN into lr */
-    "  TST     lr,#(1 << 4)     \n" /* is it return to the VFP exception frame? */
-    "  IT      EQ               \n" /* if EXC_RETURN[4] is zero... */
-    "  VLDMIAEQ sp!,{s16-s31}   \n" /* ... restore VFP registers s16..s31 */
+    "  MVNS    r2,r2            \n" // r2 := ~6 == 0xFFFFFFF9
+    "  MOV     lr,r2            \n" // make sure MSP is used
+#else                               // ARMv7-M or higher
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  POP     {r0,lr}          \n" // restore alighner and EXC_RETURN into lr
+    "  DSB                      \n" // ARM Erratum 838869
+    "  TST     lr,#(1 << 4)     \n" // is it return to the VFP exception frame?
+    "  IT      EQ               \n" // if EXC_RETURN[4] is zero...
+    "  VLDMIAEQ sp!,{s16-s31}   \n" // ... restore VFP registers s16..s31
 #else
-    "  BIC     lr,lr,#(1 << 2)  \n" /* make sure MSP is used */
-#endif                              /* VFP available */
-    "  POP     {r4-r11}         \n" /* restore r4-r11 from the next thread's stack */
-#endif                              /* M3/M4/M7 */
+    "  BIC     lr,lr,#(1 << 2)  \n" // make sure MSP is used
+#endif                              // VFP available
+    "  POP     {r4-r11}         \n" // restore r4-r11 from the next thread's stack
+#endif                              // ARMv7-M or higher
 
-    "  MOV     r0,r12           \n" /* r0 := QXK_attr_.next */
-    "  MOVS    r2,#" STRINGIFY(QACTIVE_DYN_PRIO) "\n" /* r2 := offset of .dynPrio */
-    "  LDRB    r0,[r0,r2]       \n" /* r0 := QXK_attr_.next->dynPrio */
-    "  LDRB    r2,[r3,#" STRINGIFY(QXK_ACT_PRIO) "]\n" /* r2 := QXK_attr_.actPrio */
+    "  MOV     r0,r12           \n" // r0 := QXK_priv_.next
+    "  MOVS    r2,#" STRINGIFY(QACTIVE_PRIO) "\n" // r2 := offset of .prio
+    "  LDRB    r0,[r0,r2]       \n" // r0 := QXK_priv_.next->prio
+    "  LDR     r2,[r3,#" STRINGIFY(QXK_ACT_PRIO) "]\n" // r2 := QXK_priv_.actPrio
     "  CMP     r2,r0            \n"
-    "  BCC     PendSV_activate  \n" /* if (next->dynPrio > topPrio) activate the next AO */
+    "  BCC     PendSV_activate  \n" // if (next->prio > actPrio) activate the next AO
 
-    /* otherwise no activation needed... */
+    // otherwise no activation needed...
     "  MOVS    r0,#0            \n"
-    "  STR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" /* QXK_attr_.next := 0 (clear the next) */
+    "  STR     r0,[r3,#" STRINGIFY(QXK_CURR) "]\n" // QXK_priv_.curr := 0
+    "  STR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" // QXK_priv_.next := 0
 
-#ifdef QXK_ON_CONTEXT_SW
-    "  MOVS    r0,r1            \n" /* r0 := QXK_attr_.curr */
-    "  MOV     r1,r12           \n" /* r1 := QXK_attr_.next */
-    "  LDR     r2,[r3,#" STRINGIFY(QXK_IDLE_THR) "]\n" /* r2 := idle thr ptr */
-    "  CMP     r1,r2            \n"
-    "  BNE     PendSV_onContextSw1 \n" /* if (next != idle) call onContextSw */
-    "  MOVS    r1,#0            \n" /* otherwise, next := NULL */
-    "PendSV_onContextSw1:        \n"
-    "  PUSH    {r1,lr}          \n" /* save the aligner + exception lr */
-    "  BL      QXK_onContextSw  \n" /* call QXK_onContextSw() */
-    "  POP     {r1,r2}          \n" /* restore the aligner + lr into r2 */
-    "  MOV     lr,r2            \n" /* restore the exception lr */
-#endif /* QXK_ON_CONTEXT_SW */
+#if defined(Q_SPY) || defined(QF_ON_CONTEXT_SW)
+    "  MOVS    r0,#0            \n" // r0 := 0 (next is basic)
+    "  PUSH    {r0,lr}          \n" // save the aligner + EXC_RETURN
+    "  LDR     r3,=QXK_contextSw_ \n"
+    "  BLX     r3               \n" // call QXK_contextSw_()
+#ifdef QF_MEM_ISOLATE
+    "  LDR     r3,=QF_onMemApp  \n"
+    "  BLX     r3               \n" // call QF_onMemApp()
+#endif
+    "  POP     {r0,r1}          \n" // restore the aligner + EXC_RETURN
+    "  MOV     lr,r1            \n" // restore EXC_RETURN into lr
+#endif // defined(Q_SPY) || defined(QF_ON_CONTEXT_SW)
 
-    /* re-enable interrupts and return from PendSV */
+    // re-enable interrupts and return from PendSV
     "PendSV_return:             \n"
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  CPSIE   i                \n" /* enable interrupts (clear PRIMASK) */
-#else                               /* M3/M4/M7 */
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  CPSIE   i                \n" // enable interrupts (clear PRIMASK)
+#else                               // ARMv7-M or higher
     "  MOVS    r0,#0            \n"
-    "  MSR     BASEPRI,r0       \n" /* enable interrupts (clear BASEPRI) */
-    "  DSB                      \n" /* ARM Erratum 838869 */
-#endif                              /* M3/M4/M7 */
-    /*>>>>>>>>>>>>>>>>>>>>>>>> CRITICAL SECTION END >>>>>>>>>>>>>>>>>>>>>>>>>*/
-    "  BX      lr               \n" /* return to the preempted AO-thread */
+    "  MSR     BASEPRI,r0       \n" // enable interrupts (clear BASEPRI)
+    "  DSB                      \n" // ARM Erratum 838869
+#endif                              // ARMv7-M or higher
+    //>>>>>>>>>>>>>>>>>>>>>>>> CRITICAL SECTION END >>>>>>>>>>>>>>>>>>>>>>>>>
+    "  BX      lr               \n" // return to the preempted AO-thread
 
-    /*-------------------------------------------------------------------------
-    * Saving extended-thread before crossing to AO-thread
-    * expected register contents:
-    * r0  -> QXK_attr_.next
-    * r1  -> QXK_attr_.curr
-    * r2  -> QXK_attr_.next->osObject (SP)
-    * r3  -> &QXK_attr_
-    * r12 -> QXK_attr_.next
-    */
+    //------------------------------------------------------------------------
+    // Saving extended-thread
+    // expected register contents:
+    // r0  -> QXK_priv_.next / basic-thread
+    // r1  -> QXK_priv_.curr / basic-thread
+    // r2  -> QXK_priv_.next->osObject (SP)
+    // r3  -> &QXK_priv_
+    // r12 -> QXK_priv_.next / basic-thread
     "PendSV_save_ex:            \n"
-    "  MRS     r0,PSP           \n" /* r0 := Process Stack Pointer */
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  SUBS    r0,r0,#(8*4)     \n" /* make room for 8 registers r4-r11 */
-    "  MOVS    r1,r0            \n" /* r1 := temporary PSP (do not clobber r0!) */
-    "  STMIA   r1!,{r4-r7}      \n" /* save the low registers */
-    "  MOV     r4,r8            \n" /* move the high registers to low registers... */
+    "  MRS     r0,PSP           \n" // r0 := Process Stack Pointer
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  SUBS    r0,r0,#(8*4)     \n" // make room for 8 registers r4-r11
+    "  MOVS    r1,r0            \n" // r1 := temporary PSP (do not clobber r0!)
+    "  STMIA   r1!,{r4-r7}      \n" // save the low registers
+    "  MOV     r4,r8            \n" // move the high registers to low registers...
     "  MOV     r5,r9            \n"
     "  MOV     r6,r10           \n"
     "  MOV     r7,r11           \n"
-    "  STMIA   r1!,{r4-r7}      \n" /* save the high registers */
-    /* NOTE: at this point r0 holds the top of stack */
+    "  STMIA   r1!,{r4-r7}      \n" // save the high registers
+    // NOTE: at this point r0 holds the top of stack
 
-    "  LDR     r1,[r3,#" STRINGIFY(QXK_CURR) "]\n" /* r1 := QXK_attr_.curr (restore value) */
-#else                               /* M3/M4/M7 */
-    "  ISB                      \n" /* reset pipeline after fetching PSP */
-    "  STMDB   r0!,{r4-r11}     \n" /* save r4-r11 on top of the exception frame */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  TST     lr,#(1 << 4)     \n" /* is it return with the VFP exception frame? */
-    "  IT      EQ               \n" /* if lr[4] is zero... */
-    "  VSTMDBEQ r0!,{s16-s31}   \n" /* ... save VFP registers s16..s31 */
-    "  STMDB   r0!,{r1,lr}      \n" /* save the "aligner" and the EXC_RETURN value */
-#endif                              /* VFP available */
-#endif                              /* M3/M4/M7 */
+    "  LDR     r1,[r3,#" STRINGIFY(QXK_CURR) "]\n" // r1 := QXK_priv_.curr (restore value)
+#else                               // ARMv7-M or higher
+    "  ISB                      \n" // reset pipeline after fetching PSP
+    "  STMDB   r0!,{r4-r11}     \n" // save r4-r11 on top of the exception frame
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  TST     lr,#(1 << 4)     \n" // is it return with the VFP exception frame?
+    "  IT      EQ               \n" // if lr[4] is zero...
+    "  VSTMDBEQ r0!,{s16-s31}   \n" // ... save VFP registers s16..s31
+    "  STMDB   r0!,{r1,lr}      \n" // save the "aligner" and the EXC_RETURN value
+#endif                              // VFP available
+#endif                              // ARMv7-M or higher
 
-    /* store the SP of the current extended-thread */
-    "  STR     r0,[r1,#" STRINGIFY(QACTIVE_OSOBJ) "]\n" /* QXK_attr_.curr->osObject := r0 */
-    "  MOV     r0,r12           \n" /* QXK_attr_.next (restore value) */
+    // store the SP of the current extended-thread
+    "  STR     r0,[r1,#" STRINGIFY(QACTIVE_OSOBJ) "]\n" // QXK_priv_.curr->osObject := r0
+    "  MOV     r0,r12           \n" // QXK_priv_.next (restore value)
 
     "  CMP     r2,#0            \n"
-    "  BEQ     PendSV_restore_ao\n" /* branch if (QXK_attr_.next->osObject == 0) */
-    /* otherwise continue to restoring next extended-thread... */
+    "  BEQ     PendSV_restore_ao\n" // branch if (QXK_priv_.next->osObject == 0)
+    // otherwise continue to restoring next extended-thread...
 
-    /*-------------------------------------------------------------------------
-    * Restoring extended-thread after crossing from AO-thread
-    * expected register contents:
-    * r0  -> QXK_attr_.next
-    * r1  -> QXK_attr_.curr
-    * r2  -> QXK_attr_.next->osObject (SP)
-    * r3  -> &QXK_attr_
-    * r12 -> QXK_attr_.next
-    */
+    //------------------------------------------------------------------------
+    // Restoring extended-thread
+    // expected register contents:
+    // r0  -> QXK_priv_.next / basic-thread
+    // r1  -> QXK_priv_.curr / basic-thread
+    // r2  -> QXK_priv_.next->osObject (SP)
+    // r3  -> &QXK_priv_
+    // r12 -> QXK_priv_.next / basic-thread
     "PendSV_restore_ex:         \n"
-#ifdef QXK_ON_CONTEXT_SW
-    "  MOVS    r0,r1            \n" /* r0 := QXK_attr_.curr */
-    "  MOV     r1,r12           \n" /* r1 := QXK_attr_.next */
-    "  LDR     r2,[r3,#" STRINGIFY(QXK_IDLE_THR) "]\n" /* r2 := idle thr ptr */
-    "  CMP     r0,r2            \n"
-    "  BNE     PendSV_onContextSw2 \n" /* if (curr != idle) call onContextSw */
-    "  MOVS    r0,#0            \n" /* otherwise, curr := NULL */
-    "PendSV_onContextSw2:       \n"
-    "  LDR     r3,=QXK_onContextSw \n"
-    "  BLX     r3               \n" /* call QXK_onContextSw() */
-
-    /* restore the AAPCS-clobbered registers after a functin call...  */
-    "  LDR     r3,=QXK_attr_    \n"
-    "  LDR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" /* r0 := QXK_attr_.next */
-    "  LDR     r2,[r0,#" STRINGIFY(QACTIVE_OSOBJ) "]\n" /* r2 := QXK_attr_.curr->osObject */
-#endif /* QXK_ON_CONTEXT_SW */
-
-    "  STR     r0,[r3,#" STRINGIFY(QXK_CURR) "]\n" /* QXK_attr_.curr := r0 (QXK_attr_.next) */
+    "  STR     r0,[r3,#" STRINGIFY(QXK_CURR) "]\n" // QXK_priv_.curr := r0 (QXK_priv_.next)
     "  MOVS    r0,#0            \n"
-    "  STR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" /* QXK_attr_.next := 0 */
+    "  STR     r0,[r3,#" STRINGIFY(QXK_NEXT) "]\n" // QXK_priv_.next := 0
 
-    /* exit the critical section */
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  CPSIE   i                \n" /* enable interrupts (clear PRIMASK) */
+#if defined(Q_SPY) || defined(QF_ON_CONTEXT_SW)
+    "  MOV     r0,r12           \n" // r0 := next
+    "  PUSH    {r0-r2,lr}    \n" // save next, osObject, EXC_RETURN
+    "  LDR     r3,=QXK_contextSw_ \n"
+    "  BLX     r3               \n" // call QXK_contextSw_()
+#ifdef QF_MEM_ISOLATE
+    "  LDR     r3,=QF_onMemApp  \n"
+    "  BLX     r3               \n" // call QF_onMemApp()
+#endif
+    "  POP     {r0-r3}          \n" // restore next, osObject, EXC_RETURN
+    "  MOV     lr,r3            \n" // restore the EXC_RETURN into lr
+#endif // defined(Q_SPY) || defined(QF_ON_CONTEXT_SW)
 
-    "  MOVS    r0,r2            \n" /* r2 := top of stack */
-    "  ADDS    r0,r0,#(4*4)     \n" /* point r0 to the 4 high registers r7-r11 */
-    "  LDMIA   r0!,{r4-r7}      \n" /* pop the 4 high registers into low registers */
-    "  MOV     r8,r4            \n" /* move low registers into high registers */
+
+    // exit the critical section
+#if (__ARM_ARCH == 6)               // if ARMv6-M...
+    "  CPSIE   i                \n" // enable interrupts (clear PRIMASK)
+
+    "  MOVS    r0,r2            \n" // r2 := top of stack
+    "  ADDS    r0,r0,#(4*4)     \n" // point r0 to the 4 high registers r7-r11
+    "  LDMIA   r0!,{r4-r7}      \n" // pop the 4 high registers into low registers
+    "  MOV     r8,r4            \n" // move low registers into high registers
     "  MOV     r9,r5            \n"
     "  MOV     r10,r6           \n"
     "  MOV     r11,r7           \n"
-    "  LDMIA   r2!,{r4-r7}      \n" /* pop the low registers */
-    "  MOVS    r2,r0            \n" /* r2 := holds the new top of stack */
+    "  LDMIA   r2!,{r4-r7}      \n" // pop the low registers
+    "  MOVS    r2,r0            \n" // r2 := holds the new top of stack
 
     "  MOVS    r1,#2            \n"
-    "  MVNS    r1,r1            \n" /* r1 := ~2 == 0xFFFFFFFD */
-    "  MOV     lr,r1            \n" /* make sure PSP is used */
-#else                               /* M3/M4/M7 */
+    "  MVNS    r1,r1            \n" // r1 := ~2 == 0xFFFFFFFD
+    "  MOV     lr,r1            \n" // make sure PSP is used
+#else                               // ARMv7-M or higher
     "  MOVS    r1,#0            \n"
-    "  MSR     BASEPRI,r1       \n" /* enable interrupts (clear BASEPRI) */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  LDMIA   r2!,{r1,lr}      \n" /* restore aligner and EXC_RETURN into lr */
-    "  TST     lr,#(1 << 4)     \n" /* is it return to the VFP exception frame? */
-    "  IT      EQ               \n" /* if lr[4] is zero... */
-    "  VLDMIAEQ r2!,{s16-s31}   \n" /* ... restore VFP registers s16..s31 */
+    "  MSR     BASEPRI,r1       \n" // enable interrupts (clear BASEPRI)
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  LDMIA   r2!,{r1,lr}      \n" // restore aligner and EXC_RETURN into lr
+    "  TST     lr,#(1 << 4)     \n" // is it return to the VFP exception frame?
+    "  IT      EQ               \n" // if lr[4] is zero...
+    "  VLDMIAEQ r2!,{s16-s31}   \n" // ... restore VFP registers s16..s31
 #else
-    "  ORR     lr,lr,#(1 << 2)  \n" /* make sure PSP is used */
-#endif                              /* VFP available */
-    "  LDMIA   r2!,{r4-r11}     \n" /* restore r4-r11 from the next thread's stack */
-#endif                              /* M3/M4/M7 */
+    "  ORR     lr,lr,#(1 << 2)  \n" // make sure PSP is used
+#endif                              // VFP available
+    "  LDMIA   r2!,{r4-r11}     \n" // restore r4-r11 from the next thread's stack
+#endif                              // ARMv7-M or higher
 
-    /* set the PSP to the next thread's SP */
-    "  MSR     PSP,r2           \n" /* Process Stack Pointer := r2 */
+    // set the PSP to the next thread's SP
+    "  MSR     PSP,r2           \n" // Process Stack Pointer := r2
 
-#if (__ARM_ARCH != 6)               /* NOT Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  DSB                      \n" /* ARM Erratum 838869 */
-#endif                              /* NOT (v6-M, v6S-M) */
-    "  BX      lr               \n" /* return to the next extended-thread */
+#if (__ARM_ARCH != 6)               // if ARMv7-M or higher...
+    "  DSB                      \n" // ARM Erratum 838869
+#endif                              // ARMv7-M or higher
+    "  BX      lr               \n" // return to the next extended-thread
     );
 }
 
-/*****************************************************************************
-* QXK_thread_ret is a helper function executed when the QXK activator returns.
-*
-* NOTE: QXK_thread_ret does not execute in the PendSV context!
-* NOTE: QXK_thread_ret executes entirely with interrupts DISABLED.
-*****************************************************************************/
+//============================================================================
+// QXK_thread_ret is a helper function executed when the QXK activator returns.
+//
+// NOTE: QXK_thread_ret does not execute in the PendSV context!
+// NOTE: QXK_thread_ret is entered with interrupts DISABLED.
 __stackless
 void QXK_thread_ret(void) {
-__asm (
+__asm volatile (
 
-    /* After the QXK activator returns, we need to resume the preempted
-    * thread. However, this must be accomplished by a return-from-exception,
-    * while we are still in the thread context. The switch to the exception
-    * contex is accomplished by triggering the NMI exception.
-    * NOTE: The NMI exception is triggered with nterrupts DISABLED,
-    * because QXK activator disables interrutps before return.
-    */
+    // After the QXK activator returns, we need to resume the preempted
+    // thread. However, this must be accomplished by a return-from-exception,
+    // while we are still in the thread context. The switch to the exception
+    // context is accomplished by triggering the NMI exception or the selected
+    // IRQ (if macro #QXK_USE_IRQ_NUM is defined).
 
-    /* before triggering the NMI exception, make sure that the
-    * VFP stack frame will NOT be used...
-    */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  MRS     r0,CONTROL       \n" /* r0 := CONTROL */
-    "  BICS    r0,r0,#4         \n" /* r0 := r0 & ~4 (FPCA bit) */
-    "  MSR     CONTROL,r0       \n" /* CONTROL := r0 (clear CONTROL[2] FPCA bit) */
-    "  ISB                      \n" /* ISB after MSR CONTROL (ARM AN321,Sect.4.16) */
-#endif                              /* VFP available */
+    // before triggering the NMI/IRQ, make sure that the VFP stack frame
+    // will NOT be used...
+#ifdef __ARM_FP         //--------- if VFP available...
+    // make sure that the VFP stack frame will NOT be used
+    "  MRS     r0,CONTROL       \n" // r0 := CONTROL
+    "  BICS    r0,r0,#4         \n" // r0 := r0 & ~4 (FPCA bit)
+    "  MSR     CONTROL,r0       \n" // CONTROL := r0 (clear CONTROL[2] FPCA bit)
+    "  ISB                      \n" // ISB after MSR CONTROL (ARM AN321,Sect.4.16)
+#endif                  //--------- VFP available
 
-    /* trigger NMI to return to preempted task...
-    * NOTE: The NMI exception is triggered with nterrupts DISABLED
-    */
-    "  LDR     r0,=0xE000ED04   \n" /* Interrupt Control and State Register */
+#ifdef QF_MEM_ISOLATE
+    "  PUSH    {r0,lr}          \n" // save the aligner + EXC_RETURN
+    "  LDR     r0,=QF_onMemApp  \n"
+    "  BLX     r0               \n" // call QF_onMemApp()
+    "  POP     {r0,r1}          \n" // restore the aligner + EXC_RETURN
+    "  MOV     lr,r1            \n" // restore EXC_RETURN into lr
+#endif
+
+#ifndef QXK_USE_IRQ_NUM //--------- IRQ NOT defined, use NMI by default
+    "  LDR     r0,=" STRINGIFY(SCB_ICSR) "\n" // Interrupt Control and State
     "  MOVS    r1,#1            \n"
-    "  LSLS    r1,r1,#31        \n" /* r1 := (1 << 31) (NMI bit) */
-    "  STR     r1,[r0]          \n" /* ICSR[31] := 1 (pend NMI) */
-    "  B       .                \n" /* wait for preemption by NMI */
-    );
-}
+    "  LSLS    r1,r1,#31        \n" // r1 := (1 << 31) (NMI bit)
+    "  STR     r1,[r0]          \n" // ICSR[31] := 1 (pend NMI)
 
-/*****************************************************************************
-* The NMI_Handler exception handler is used for returning back to the
-* interrupted task. The NMI exception simply removes its own interrupt
-* stack frame from the stack and returns to the preempted task using the
-* interrupt stack frame that must be at the top of the stack.
-*
-* NOTE: The NMI exception is entered with interrupts DISABLED, so it needs
-* to re-enable interrupts before it returns to the preempted task.
-*****************************************************************************/
-__stackless
-void NMI_Handler(void) {
-__asm (
+#else                   //--------- use the selected IRQ
+    "  LDR     r0,=" STRINGIFY(NVIC_PEND + ((QXK_USE_IRQ_NUM >> 5) << 2)) "\n"
+    "  MOVS    r1,#1            \n"
+    "  LSLS    r1,r1,#" STRINGIFY(QXK_USE_IRQ_NUM & 0x1F) "\n" // r1 := IRQ bit
+    "  STR     r1,[r0]          \n" // pend the IRQ
 
-    "  ADD     sp,sp,#(8*4)     \n" /* remove one 8-register exception frame */
-
-#if (__ARM_ARCH == 6)               /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
-    "  CPSIE   i                \n" /* enable interrupts (clear PRIMASK) */
-    "  BX      lr               \n" /* return to the preempted task */
-#else                               /* M3/M4/M7 */
+    // now enable interrupts so that pended IRQ can be entered
+#if (__ARM_ARCH == 6)   //--------- if ARMv6-M...
+    "  CPSIE   i                \n" // enable interrupts (clear PRIMASK)
+#else                   //--------- ARMv7-M and higher
     "  MOVS    r0,#0            \n"
-    "  MSR     BASEPRI,r0       \n" /* enable interrupts (clear BASEPRI) */
-#if (__ARM_FP != 0)                 /* if VFP available... */
-    "  POP     {r0,lr}          \n" /* pop stack aligner and EXC_RETURN to LR */
-    "  DSB                      \n" /* ARM Erratum 838869 */
-#endif                              /* no VFP */
-    "  BX      lr               \n" /* return to the preempted task */
-#endif                              /* M3/M4/M7 */
+    "  MSR     BASEPRI,r0       \n" // enable interrupts (clear BASEPRI)
+#endif                  //--------- ARMv7-M and higher
+#endif                  //--------- use IRQ
+
+    // NOTE! interrupts are still disabled when NMI is used
+    "  B       .                \n" // wait for preemption by NMI/IRQ
     );
 }
 
-#if (__ARM_ARCH == 6) /* Cortex-M0/M0+/M1 (v6-M, v6S-M)? */
+//============================================================================
+// This exception handler is used for returning back to the preempted thread.
+// The exception handler simply removes its own interrupt stack frame from
+// the stack (MSP) and returns to the preempted task using the interrupt
+// stack frame that must be at the top of the stack.
+__stackless
+#ifndef QXK_USE_IRQ_NUM //--------- IRQ NOT defined, use NMI by default
 
-/*****************************************************************************
-* hand-optimized quick LOG2 in assembly (M0/M0+ have no CLZ instruction)
-*****************************************************************************/
-uint_fast8_t QF_qlog2(uint32_t x) {
+// NOTE: The NMI_Handler() is entered with interrupts still disabled!
+void NMI_Handler(void) {
+__asm volatile (
+    // enable interrupts
+#if (__ARM_ARCH == 6)   //--------- if ARMv6-M...
+    "  CPSIE   i                \n" // enable interrupts (clear PRIMASK)
+#else                   //--------- ARMv7-M and higher
+    "  MOVS    r0,#0            \n"
+    "  MSR     BASEPRI,r0       \n" // enable interrupts (clear BASEPRI)
+#endif                  //--------- ARMv7-M and higher
+);
+
+#else                   //--------- use the selected IRQ
+
+// NOTE: The IRQ Handler is entered with interrupts enabled
+void QXK_USE_IRQ_HANDLER(void) {
+#endif                  //--------- use IRQ
+__asm volatile (
+    "  ADD     sp,sp,#(8*4)     \n" // remove one 8-register exception frame
+
+#ifdef __ARM_FP         //--------- if VFP available...
+    "  POP     {r0,lr}          \n" // restore alighner and EXC_RETURN into lr
+    "  DSB                      \n" // ARM Erratum 838869
+    "  TST     lr,#(1 << 4)     \n" // is it return to the VFP exception frame?
+    "  IT      EQ               \n" // if EXC_RETURN[4] is zero...
+    "  VLDMIAEQ sp!,{s16-s31}   \n" // ... restore VFP registers s16..s31
+#endif                  //--------- VFP available
+    "  BX      lr               \n" // return to the preempted task
+    );
+}
+
+//============================================================================
+#if (__ARM_ARCH == 6) // if ARMv6-M...
+
+// hand-optimized quick LOG2 in assembly (no CLZ instruction in ARMv6-M)
+std::uint_fast8_t QF_qlog2(std::uint32_t x) {
     static uint8_t const log2LUT[16] = {
         0U, 1U, 2U, 2U, 3U, 3U, 3U, 3U,
         4U, 4U, 4U, 4U, 4U, 4U, 4U, 4U
     };
     uint_fast8_t n;
-    __asm (
-        "MOVS    %[n],#0\n"
+
+__asm volatile (
+   "  MOVS    %[n],#0           \n"
 #if (QF_MAX_ACTIVE > 16U)
-        "LSRS    r2,r0,#16\n"
-        "BEQ.N   QF_qlog2_1\n"
-        "MOVS    %[n],#16\n"
-        "MOVS    r0,r2\n"
-    "QF_qlog2_1:\n"
+    "  LSRS    r2,r0,#16        \n"
+    "  BEQ     QF_qlog2_1       \n"
+    "  MOVS    %[n],#16         \n"
+    "  MOVS    r0,r2            \n"
+    "QF_qlog2_1:                \n"
 #endif
 #if (QF_MAX_ACTIVE > 8U)
-        "LSRS    r2,r0,#8\n"
-        "BEQ.N   QF_qlog2_2\n"
-        "ADDS    %[n],%[n],#8\n"
-        "MOVS    r0,r2\n"
-    "QF_qlog2_2:\n"
+    "  LSRS    r2,r0,#8         \n"
+    "  BEQ     QF_qlog2_2       \n"
+    "  ADDS    %[n],%[n],#8     \n"
+    "  MOVS    r0,r2            \n"
+    "QF_qlog2_2:                \n"
 #endif
-        "LSRS    r2,r0,#4\n"
-        "BEQ.N   QF_qlog2_3\n"
-        "ADDS    %[n],%[n],#4\n"
-        "MOVS    r0,r2\n"
-    "QF_qlog2_3:"
-        : [n]"=r"(n)
-    );
+    "  LSRS    r2,r0,#4         \n"
+    "  BEQ.N   QF_qlog2_3       \n"
+    "  ADDS    %[n],%[n],#4     \n"
+    "  MOVS    r0,r2            \n"
+    "QF_qlog2_3:" : [n]"=r"(n)
+);
     return n + log2LUT[x];
 }
 
-#endif /* Cortex-M0/M0+/M1(v6-M, v6S-M)? */
+#endif // ARMv6-M
 
 } // extern "C"
 

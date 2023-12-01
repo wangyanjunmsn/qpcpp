@@ -1,13 +1,13 @@
 //***************************************************************************
 // Product: Fixture for QUTEST
-// Last updated for version 6.5.1
-// Last updated on  2019-05-23
+// Last updated for version 7.3.0
+// Last updated on  2023-07-19
 //
 //                    Q u a n t u m  L e a P s
 //                    ------------------------
 //                    Modern Embedded Software
 //
-// Copyright (C) 2005-2018 Quantum Leaps, LLC. All rights reserved.
+// Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
 //
 // This program is open source software: you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as published
@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"  // QP/C++ framework API
 #include "blinky.hpp" // Blinky application
 #include "bsp.hpp"    // Board Support Package interface
@@ -41,13 +41,13 @@ Q_DEFINE_THIS_FILE
 
 //............................................................................
 int main(int argc, char *argv[]) {
-    static QF_MPOOL_EL(QEvt) smlPoolSto[10]; // storage for small pool
-    static QEvt const *blinkyQSto[10]; // event queue storage for Blinky
 
     QF::init();  // initialize the framework
 
     // initialize the QS software tracing
-    Q_ALLEGE(QS_INIT(argc > 1 ? argv[1] : nullptr));
+    if (!QS_INIT(argc > 1 ? argv[1] : nullptr)) {
+        Q_ERROR();
+    }
 
     BSP::init(); // initialize the BSP
 
@@ -57,12 +57,14 @@ int main(int argc, char *argv[]) {
     // pause execution of the test and wait for the test script to continue
     QS_TEST_PAUSE();
 
-    // publish-subscribe not used, no call to QF_psInit()
+    // publish-subscribe not used, no call to QF::psInit()
 
     // initialize event pools...
+    static QF_MPOOL_EL(QEvt) smlPoolSto[10]; // storage for small pool
     QF::poolInit(smlPoolSto, sizeof(smlPoolSto), sizeof(smlPoolSto[0]));
 
     // start the active objects...
+    static QEvt const *blinkyQSto[10]; // event queue storage for Blinky
     AO_Blinky->start(1U,
                      blinkyQSto, Q_DIM(blinkyQSto),
                      nullptr, 0U, (QEvt *)0);
@@ -80,17 +82,10 @@ void QS::onTestTeardown(void) {
 void QS::onCommand(uint8_t cmdId,
                   uint32_t param1, uint32_t param2, uint32_t param3)
 {
-    (void)param1;
-    (void)param2;
-    (void)param3;
-
-    switch (cmdId) {
-       case 0U: {
-           break;
-       }
-       default:
-           break;
-    }
+    Q_UNUSED_PAR(cmdId);
+    Q_UNUSED_PAR(param1);
+    Q_UNUSED_PAR(param2);
+    Q_UNUSED_PAR(param3);
 }
 
 //............................................................................
@@ -106,8 +101,8 @@ void QS::onTestEvt(QEvt *e) {
 void QS::onTestPost(void const *sender, QActive *recipient,
                     QEvt const *e, bool status)
 {
-    (void)sender;
-    (void)recipient;
-    (void)e;
-    (void)status;
+    Q_UNUSED_PAR(sender);
+    Q_UNUSED_PAR(recipient);
+    Q_UNUSED_PAR(e);
+    Q_UNUSED_PAR(status);
 }

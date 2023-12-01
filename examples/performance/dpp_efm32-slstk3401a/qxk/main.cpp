@@ -1,4 +1,4 @@
-//****************************************************************************
+//============================================================================
 // DPP example for QXK
 // Last updated for version 6.7.0
 // Last updated on  2019-12-26
@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "dpp.hpp"
 #include "test.hpp"
@@ -52,7 +52,7 @@ int main() {
     DPP::BSP::init(); // initialize the BSP
 
     // initialize publish-subscribe...
-    QP::QF::psInit(subscrSto, Q_DIM(subscrSto));
+    QP::QActive::psInit(subscrSto, Q_DIM(subscrSto));
 
     // initialize event pools...
     QP::QF::poolInit(smlPoolSto,

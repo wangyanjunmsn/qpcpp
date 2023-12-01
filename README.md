@@ -1,35 +1,48 @@
-![QP Framework](doxygen/images/qp_banner.jpg)
+![QP Framework](https://www.state-machine.com/img/qp_banner.jpg)
 
-> **NOTE:** If your company has a policy forbidding open source in your
-product, all QP frameworks can be
-[licensed commercially](https://www.state-machine.com/licensing),
-in which case you don't use any open source license and you do not violate
-your policy.
-
----------------------------------------------------------------------------
 # What's New?
+
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/QuantumLeaps/qpcpp)](https://github.com/QuantumLeaps/qpcpp/releases/latest)
+
+
 View QP/C++ Revision History at: https://www.state-machine.com/qpcpp/history.html
 
+> **NOTE:** If you're interested in the latest QP/C++ version from GitHub,
+it is highly recommened that you clone this repo like that:
 
----------------------------------------------------------------------------
-# Documentation
-The offline HTML documentation for **this** particular version of QP/C++
-is located in the folder html/. To view the offline documentation, open
-the file html/index.html in your web browser.
+```
+git clone https://github.com/QuantumLeaps/qpcpp --recurse-submodules --depth 1
+```
 
-The online HTML documention for the **latest** version of QP/C++ is located
-at: https://www.state-machine.com/qpcpp/
+Alternatively, you can also download the latest
+[QP/C++ Release](https://github.com/QuantumLeaps/qpcpp/releases).
 
 
----------------------------------------------------------------------------
+# Getting Started with QP/C++
+The most recommended way of obtaining QP/C++ is by downloading the
+[QP-bundle](https://www.state-machine.com/#Downloads), which includes QP/C++
+as well as the QM modeling tool and the QTools collection. The main advantage of
+obtaining QP/C++ bundled together like that is that you get all components,
+tools and examples ready to go.
+
+### Getting Started Resources
+- ["QP/C++ Tutorial"][Tutorial]
+describes a series of progressively advanced QP/C++ example applications.
+
+- [Video: "Getting Started with QP Real-Time Embedded Frameworks"][Video]
+provides instructions on how to download, install, and get started with QP.
+
+- [AppNote: "Getting Started with QP Real-Time Embedded Frameworks"][AN]
+contains also a tutorial, in which you build a simple "Blinky" application.
+
+
 # About QP/C++
 QP/C++ (Quantum Platform in C++) is a lightweight, open source
 [Real-Time Embedded Framework (RTEF)][RTEF] for building modern embedded
 software as systems of asynchronous, event-driven [active objects][Active]
-(actors). The [QP/C++] framework is a member of a larger [QP] family
-consisting of [QP/C], [QP/C++], and [QP-nano] frameworks, which are all
-strictly quality controlled, thoroughly documented, and [commercially
-licensable][Lic].
+(actors). The [QP/C++] framework is a member of a [QP] family consisting of
+[QP/C] and [QP/C++] frameworks, which are strictly quality controlled,
+thoroughly documented, and [commercially licensable][Lic].
 
 ## Safer Model of Concurrency
 The [QP] framework family is based on the [Active Object][Active] (**actor**)
@@ -74,43 +87,46 @@ as ARM Cortex-M (M0/M0+/M3/M4/M7).
 QP/C++ can also work with a traditional RTOS, such as ThreadX, FreeRTOS, embOS,
 uC/OS-II and TI-RTOS, as well as with (embedded) Linux (POSIX) and Windows.
 
-## Maturity
-With 60,000 downloads a year, the [QP] family is the most popular such
-solution on the embedded software market. It provides a modern, reusable
-architecture for embedded applications, which combines the active-object
-model of concurrency with hierarchical state machines.
-
----------------------------------------------------------------------------
-# Getting Started with QP/C++
-The [QP/C++ Reference Manual](https://www.state-machine.com/qpcpp/) provides
-instructions on how to download, install, and get started with QP/C++ quickly.
-
-The [AppNote: "Getting Started with QP/C++"][AN] contains also a tutorial,
-in which you build a simple "Blinky" application.
+## Popularity and Maturity
+With 20 years of continuous development, over [350 commercial licensees][Cust],
+and many times more open source users worldwide, the QP™ frameworks are the
+most popular such offering on the market. They power countless electronic
+products ranging from implantable medical devices to complex weapon systems.
 
 
----------------------------------------------------------------------------
 # QP/C++ Licensing
-QP/C++ is licensed under the increasingly popular [dual licensing model][Lic],
+QP/C++ is licensed under the sustainable [dual licensing model][Lic],
 in which both the open source software distribution mechanism and
 traditional closed source software distribution models are combined.
 
-> **NOTE:** If your company has a policy forbidding open source in your product,
-all QP frameworks can be [licensed commercially][Lic], in which case you don't
-use any open source license and you do not violate your policy.
+> **NOTE:** If your company has a policy forbidding open source in your
+product, all QP frameworks can be [licensed commercially][Lic], in which case
+you don't use any open source license and you do not violate your policy.
 
----------------------------------------------------------------------------
+
 # QP/C++ Documentation
-The **QP/C++ Manual** is located online at: https://www.state-machine.com/qpcpp
+The online HTML documention for the **latest** version of QP/C++ is located
+at: https://www.state-machine.com/qpcpp
 
----------------------------------------------------------------------------
-# How to get help?
+The offline HTML documentation for **this** particular version of QP/C++
+is located in the sub-folder [html](html). To view the offline documentation,
+open the file [html/index.html](html/index.html) in your web browser.
+
+
+# How to Get Help?
 - [Free Support Forum](https://sourceforge.net/p/qpc/discussion/668726)
 - [Bug Reports](https://sourceforge.net/p/qpc/bugs/)
 - [Feature Requests](https://sourceforge.net/p/qpc/feature-requests/)
 - [Quantum Leaps website](https://www.state-machine.com)
 - [Quantum Leaps licensing](https://www.state-machine.com/licensing)
 - [info@state-machine.com](mailto:info@state-machine.com)
+
+
+# How to Help this Project?
+If you like this project, please give it a star (in the upper-right corner of your browser window):
+
+![GitHub star](https://www.state-machine.com/img/github-star.jpg)
+
 
    [RTEF]: <https://www.state-machine.com/rtef>
    [QP]: <https://www.state-machine.com/products/qp>
@@ -120,4 +136,7 @@ The **QP/C++ Manual** is located online at: https://www.state-machine.com/qpcpp
    [Active]: <https://www.state-machine.com/active-object>
    [HSM]: <https://www.state-machine.com/fsm#HSM>
    [Lic]: <https://www.state-machine.com/licensing>
-   [AN]: <https://www.state-machine.com/doc/AN_Getting_Started_with_QPCpp.pdf>
+   [Cust]: <https://www.state-machine.com/customers>
+   [AN]: <https://www.state-machine.com/doc/AN_Getting_Started_with_QP.pdf>
+   [Tutorial]: <https://www.state-machine.com/qpcpp/gs_tut.html>
+   [Video]: <https://youtu.be/O7ER6_VqIH0>

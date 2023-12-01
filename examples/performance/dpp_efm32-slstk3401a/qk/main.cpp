@@ -1,4 +1,4 @@
-//****************************************************************************
+//============================================================================
 // DPP example
 // Last updated for version 5.6.2
 // Last updated on  2016-03-31
@@ -30,7 +30,7 @@
 // Contact information:
 // https://state-machine.com
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "dpp.hpp"
 #include "bsp.hpp"
@@ -48,7 +48,7 @@ int main() {
 
     DPP::BSP::init(); // initialize the BSP
 
-    QP::QF::psInit(subscrSto, Q_DIM(subscrSto)); // init publish-subscribe
+    QP::QActive::psInit(subscrSto, Q_DIM(subscrSto)); // init publish-subscribe
 
     // initialize event pools...
     QP::QF::poolInit(smlPoolSto,

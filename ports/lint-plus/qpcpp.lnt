@@ -1,60 +1,56 @@
-/// @file
-/// @brief PC-Lint-Plus option file for linting QP/C++ applications
-/// @cond
-///===========================================================================
-/// Last updated for version 6.9.1
-/// Last updated on  2020-09-17
-///
-///                    Q u a n t u m  L e a P s
-///                    ------------------------
-///                    Modern Embedded Software
-///
-/// Copyright (C) 2005-2020 Quantum Leaps. All rights reserved.
-///
-/// This program is open source software: you can redistribute it and/or
-/// modify it under the terms of the GNU General Public License as published
-/// by the Free Software Foundation, either version 3 of the License, or
-/// (at your option) any later version.
-///
-/// Alternatively, this program may be distributed and modified under the
-/// terms of Quantum Leaps commercial licenses, which expressly supersede
-/// the GNU General Public License and are specifically designed for
-/// licensees interested in retaining the proprietary status of their code.
-///
-/// This program is distributed in the hope that it will be useful,
-/// but WITHOUT ANY WARRANTY; without even the implied warranty of
-/// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-/// GNU General Public License for more details.
-///
-/// You should have received a copy of the GNU General Public License
-/// along with this program. If not, see <www.gnu.org/licenses>.
-///
-/// Contact information:
-/// <www.state-machine.com/licensing>
-/// <info@state-machine.com>
-///===========================================================================
-/// @endcond
+//============================================================================
+// QP/C++ Real-Time Embedded Framework (RTEF)
+// Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-QL-commercial
+//
+// This software is dual-licensed under the terms of the open source GNU
+// General Public License version 3 (or any later version), or alternatively,
+// under the terms of one of the closed source Quantum Leaps commercial
+// licenses.
+//
+// The terms of the open source GNU General Public License version 3
+// can be found at: <www.gnu.org/licenses/gpl-3.0>
+//
+// The terms of the closed source Quantum Leaps commercial licenses
+// can be found at: <www.state-machine.com/licensing>
+//
+// Redistributions in source code must retain this top-level comment block.
+// Plagiarizing this software to sidestep the license obligations is illegal.
+//
+// Contact information:
+// <www.state-machine.com>
+// <info@state-machine.com>
+//============================================================================
+//! @date Last updated on: 2023-09-01
+//! @version Last updated for version: 7.3.0
+//!
+//! @file
+//! @brief PC-Lint-Plus option file for linting QP/C++ __Applications__
+
+//----------------------------------------------------------------------------
+// globally supress the following warnings:
+-e546           // explicitly taking address of function
+-e717           // monocarpic do-while used to group statements
+-e1756          // variable has 'static' storage duration and non-POD type
+-e3412          // class has virtual functions but non-virtual destructor
 
 // Assertions ----------------------------------------------------------------
 
-// old-style c comment [AUTOSAR Rule A2-8-4]
--efile(1904,
- -qassert.h)
-
-// give Q_onAssert() the semantics of "exit"
+// give Q_onError() the semantics of "exit"
 -function(exit,
- Q_onAssert)
+ Q_onError)
 
 // C-style array type [AUTOSAR Rule A18-1-1]
 -esym(9436,
  QP::versionStr)
 
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
+ Q_DEFINE_THIS_MODULE,
+ Q_ASSERT_STATIC,
  Q_ASSERT,
  Q_ASSERT_ID,
- Q_ALLEGE,
- Q_ALLEGE_ID,
  Q_ERROR,
  Q_ERROR_ID,
  Q_REQUIRE,
@@ -63,16 +59,12 @@
  Q_ENSURE_ID,
  Q_INVARIANT,
  Q_INVARIANT_ID,
- Q_ASSERT_STATIC,
- Q_ASSERT_COMPILE,
- Q_DEFINE_THIS_MODULE)
+ Q_DIM)
 
 // use of c-style cast to void [AS-A5-2-2]
 -emacro(1954,
  Q_ASSERT,
  Q_ASSERT_ID,
- Q_ALLEGE,
- Q_ALLEGE_ID,
  Q_ERROR,
  Q_ERROR_ID,
  Q_REQUIRE,
@@ -80,9 +72,10 @@
  Q_ENSURE,
  Q_ENSURE_ID,
  Q_INVARIANT,
- Q_INVARIANT_ID)
+ Q_INVARIANT_ID,
+ Q_ASSERT_INCRIT)
 
-// MC++R10-0-6 unparenthesized macro parameter 'class_' in definition of macro
+// MC++R10-0-6 unparenthesized macro parameter in definition of macro
 -esym(9022,
  Q_DEFINE_THIS_FILE,
  Q_DEFINE_THIS_MODULE)
@@ -92,14 +85,12 @@
  Q_DEFINE_THIS_FILE,
  Q_DEFINE_THIS_MODULE)
 
-// MC++R7-3-1 global declaration of symbol 'Q_this_module_'
--esym(9141,
- Q_this_module_)
-
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
+ Q_UNUSED_PAR,
  Q_DIM,
- Q_UINT2PTR_CAST)
+ Q_UINT2PTR_CAST,
+ Q_UINTPTR_CAST_)
 
 // MC++R5-2-4 use of c-style cast
 -emacro(1924,
@@ -119,9 +110,15 @@
  float32_t,
  float64_t)
 
-// MC++R16-0-4 function-like macro
+// AUTOSAR Rule A3-3-2 non-private data member within a non-POD structure
+// NOTE: public access needed for extern "C" functions
+-esym(9150,
+ QP::QAsm::*)
+
+// AC++M16-3-2 function-like macro
 -esym(9026,
- QEVT_INITIALIZER,
+ INIT,
+ DISPATCH,
  Q_STATE_DECL,
  Q_STATE_DEF,
  QM_STATE_DECL,
@@ -150,9 +147,8 @@
  QM_UNHANDLED,
  Q_HSM_UPCAST,
  Q_EVT_CAST,
- Q_UINT2PTR_CAST,
  Q_STATE_CAST,
- Q_ACTION_CAST)
+ Q_UINT2PTR_CAST)
 
 // MC++R5-2-8 conversion from pointer to other pointer type
 -emacro(9079,
@@ -186,7 +182,7 @@
  QM_SM_STATE_DECL,
  QM_ACTION_DEF)
 
-// MC++16-3-2 pasting operator used in definition of function-like macro
+// AC++M16-3-2 stringize operator used in definition of function-like macro
 -esym(9024,
  Q_STATE_DECL,
  Q_STATE_DEF,
@@ -209,12 +205,11 @@
 
 // MC++9-5-1 union declared
 -esym(9018,
- QP::QHsmAttr)
+ QP::QAsmAttr)
 
 // MC++5-2-8 conversion from integer type (0) to pointer type
 -emacro(9010,
- Q_STATE_CAST,
- Q_ACTION_CAST)
+ Q_STATE_CAST)
 
 // public virtual function 'QP::QHsm::...'
 -esym(1731,
@@ -223,42 +218,40 @@
 
 
 // QF ------------------------------------------------------------------------
-// MC++R16-0-4 function-like macro
+
+// AUTOSAR Rule A3-3-2 non-private data member within a non-POD structure
+// NOTE: public access needed for extern "C" functions
+-esym(9150,
+ QP::QF::QF_Attr::*)
+
+// AC++M16-3-2 function-like macro
 -esym(9026,
  POST,
  POST_X,
  PUBLISH,
- TICK,
  TICK_X,
- QF_CRIT_ENTRY,
- QF_CRIT_EXIT,
+ TICK,
+ TRIG,
  QF_INT_DISABLE,
  QF_INT_ENABLE,
  QF_CRIT_EXIT_NOP,
  QF_LOG2,
+ Q_PRIO,
  Q_NEW,
  Q_NEW_X,
  Q_NEW_REF,
  Q_DELETE_REF,
  QF_INT_DISABLE,
  QF_INT_ENABLE,
- QF_CRIT_ENTRY,
- QF_CRIT_EXIT,
- QF_QS_CRIT_ENTRY,
- QF_QS_CRIT_EXIT,
- QF_QS_ISR_ENTRY,
- QF_QS_ISR_EXIT,
- QF_QS_ACTION,
  QF_MPOOL_EL)
-
-// MC++R11-0-1 non-private data member within a non-POD structure
-// NOTE: public access needed for extern "C" functions
--esym(9150,
- QP::QActive::*)
 
 // MC++R0-3-2  ignoring return value of function
 -emacro(534,
  POST)
+
+// [AUTOSAR Rule M17-0-2] the name xxx is reserved to the compiler
+-esym(9093,
+ remove) // QPrioSet::remvoe()
 
 // MC++R5-2-7 pointer type converted to unrelated pointer type
 -emacro(9176,
@@ -296,10 +289,9 @@
 -esym(1790,
  QP::QEvt)
 
-
 // QK ------------------------------------------------------------------------
 
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
  QK_ISR_ENTRY,
  QK_ISR_EXIT)
@@ -333,15 +325,15 @@
 -emacro(9079,
  QXK_PTR_CAST_)
 
-// MC++R5-2-2 casting from base class 'QP::QActive' to derived class 'QP::QXThread'
+// MC++R5-2-2 casting from base class to derived class
 -emacro(1939,
  QXTHREAD_CAST_)
 
-// MC++R5-2-3 downcast of polymorphic type 'QP::QActive' to type 'QP::QXThread'
+// MC++R5-2-3 downcast of polymorphic type
 -emacro(9171,
  QXTHREAD_CAST_)
 
-// MC++R17-0-2 the name 'signal' is reserved to the compiler
+// [AUTOSAR Rule M17-0-2] the name 'signal' is reserved to the compiler
 -esym(9093,
  signal)
 
@@ -349,10 +341,19 @@
 -esym(1731,
  QP::QXThread::*)
 
+// [AUTOSAR Rule M8-4-2] parameter of function has different name than
+// overridden function
+-esym(9272,
+ QP::QXMutex::init*)
+
+// function xxx matches the name of a standard library function
+-esym(8502,
+ signal) // QXSemaphore::signal()
+
 
 // QS ------------------------------------------------------------------------
 
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
  QS_INIT,
  QS_EXIT,
@@ -365,8 +366,13 @@
  QS_GET_BLOCK,
  QS_BEGIN_ID,
  QS_END,
- QS_BEGIN_NOCRIT,
- QS_END_NOCRIT,
+ QS_BEGIN_INCRIT,
+ QS_END_INCRIT,
+ QS_QF_CRIT_ENTRY,
+ QS_QF_CRIT_EXIT,
+ QS_QF_ISR_ENTRY,
+ QS_QF_ISR_EXIT,
+ QS_ONLY,
  QS_I8,
  QS_U8,
  QS_I16,
@@ -383,11 +389,14 @@
  QS_FUN,
  QS_SIG_DICTIONARY,
  QS_OBJ_DICTIONARY,
+ QS_OBJ_ARR_DICTIONARY,
  QS_FUN_DICTIONARY,
  QS_USR_DICTIONARY,
+ QS_ENUM_DICTIONARY,
  QS_ASSERTION,
  QS_FLUSH,
  QS_MEM,
+ QS_ENUM,
  QS_SIG,
  QS_PTR_AT_,
  QS_RX_PUT,
@@ -398,14 +407,14 @@
  QS_TEST_PROBE,
  QS_TEST_PROBE_ID)
 
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
  QS_GLB_CHECK_,
  QS_LOC_CHECK_,
  QS_BEGIN_PRE_,
  QS_END_PRE_,
- QS_BEGIN_NOCRIT_PRE_,
- QS_END_NOCRIT_PRE_,
+ QS_BEGIN_PRE_,
+ QS_END_PRE_,
  QS_U8_PRE_,
  QS_2U8_PRE_,
  QS_U16_PRE_,
@@ -421,7 +430,7 @@
  QS_MPS_PRE_,
  QS_TEC_PRE_)
 
-// MC++R16-0-4 function-like macro
+// AC++M16-3-2 function-like macro
 -esym(9026,
  QS_REC_DONE)
 
@@ -434,12 +443,14 @@
  QS_FUN_DICTIONARY,
  QS_TEST_PROBE_DEF)
 
-// M3-R20.10(a) stringize operator
+// AC++M16-3-2 stringize operator used in definition of function-like macro
 -esym(9024,
  QS_OBJ_DICTIONARY,
+ QS_OBJ_ARR_DICTIONARY,
  QS_FUN_DICTIONARY,
  QS_SIG_DICTIONARY,
- QS_USR_DICTIONARY)
+ QS_USR_DICTIONARY,
+ QS_ENUM_DICTIONARY)
 
 // MC++R9-5-1 union 'TCast' declared
 -esym(9018,
@@ -455,7 +466,9 @@
 
 // MC++R11-0-1 non-private data member within a non-POD structure
 -esym(9150,
+ QP::QEvt::*,
  QP::QActive::*,
+ QP::QF::Attr::*,
  QP::QS::QSrxPriv::*)
 
 // MC++9-5-1 union declared
@@ -463,5 +476,4 @@
  F32Rep,
  F64Rep,
  U32Rep)
-
 

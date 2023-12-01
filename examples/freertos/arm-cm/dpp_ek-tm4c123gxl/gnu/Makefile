@@ -1,13 +1,13 @@
 ##############################################################################
-# Product: Makefile for QP/C++ on EK-TM4C123GXL, FreeRTOS kernel, GNU-ARM
-# Last Updated for Version: 6.9.4
-# Date of the Last Update:  2021-07-01
+# Product: Makefile for QP/C++ on EK-TM4C123GXL, FreeRTOS-Kernel, GNU-ARM
+# Last Updated for Version: 7.2.2
+# Date of the Last Update:  2023-03-04
 #
 #                    Q u a n t u m  L e a P s
 #                    ------------------------
 #                    Modern Embedded Software
 #
-# Copyright (C) 2005-2021 Quantum Leaps, LLC. All rights reserved.
+# Copyright (C) 2005 Quantum Leaps, LLC. <www.state-machine.com>.
 #
 # This program is open source software: you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as published
@@ -64,7 +64,7 @@ endif
 
 # location of the FREERTOS (if not provided in an environemnt var.)
 ifeq ($(FREERTOS),)
-FREERTOS := $(QPCPP)/3rd_party/FreeRTOS
+FREERTOS := $(QPCPP)/3rd_party/FreeRTOS-Kernel
 endif
 
 # QP port used in this project
@@ -76,8 +76,8 @@ VPATH = \
 	$(QPCPP)/src/qf \
 	$(QPCPP)/src/qs \
 	$(QP_PORT_DIR) \
-	$(FREERTOS)/Source \
-	$(FREERTOS)/Source/portable/GCC/ARM_CM4F \
+	$(FREERTOS) \
+	$(FREERTOS)/portable/GCC/ARM_CM4F \
 	$(QPCPP)/3rd_party/ek-tm4c123gxl \
 	$(QPCPP)/3rd_party/ek-tm4c123gxl/gnu
 
@@ -85,10 +85,9 @@ VPATH = \
 INCLUDES  = \
 	-I.. \
 	-I$(QPCPP)/include \
-	-I$(QPCPP)/src \
 	-I$(QP_PORT_DIR) \
-	-I$(FREERTOS)/Source/include \
-	-I$(FREERTOS)/Source/portable/GCC/ARM_CM4F \
+	-I$(FREERTOS)/include \
+	-I$(FREERTOS)/portable/GCC/ARM_CM4F \
 	-I$(QPCPP)/3rd_party/CMSIS/Include \
 	-I$(QPCPP)/3rd_party/ek-tm4c123gxl
 
@@ -118,7 +117,6 @@ QP_SRCS := \
 	qep_hsm.cpp \
 	qep_msm.cpp \
 	qf_act.cpp \
-	qf_actq.cpp \
 	qf_defer.cpp \
 	qf_dyn.cpp \
 	qf_mem.cpp \
@@ -130,8 +128,9 @@ QP_SRCS := \
 	qf_port.cpp
 
 RTOS_SRCS := \
-	list.c \
 	tasks.c \
+	queue.c \
+	list.c \
 	port.c
 
 QS_SRCS := \
@@ -143,7 +142,7 @@ LIB_DIRS  :=
 LIBS      :=
 
 # defines
-DEFINES   := -DTARGET_IS_TM4C123_RB1
+DEFINES   := -DQP_CONFIG
 
 # ARM CPU, ARCH, FPU, and Float-ABI types...
 # ARM_CPU:   [cortex-m0 | cortex-m0plus | cortex-m1 | cortex-m3 | cortex-m4]
@@ -272,7 +271,7 @@ $(TARGET_BIN): $(TARGET_ELF)
 	$(BIN) -O binary $< $@
 
 $(TARGET_ELF) : $(ASM_OBJS_EXT) $(C_OBJS_EXT) $(CPP_OBJS_EXT)
-	$(CPP) $(CPPFLAGS) $(QPCPP)/include/qstamp.cpp -o $(BIN_DIR)/qstamp.o
+	$(CPP) $(CPPFLAGS) $(QPCPP)/src/qs/qstamp.cpp -o $(BIN_DIR)/qstamp.o
 	$(LINK) $(LINKFLAGS) -o $@ $^ $(BIN_DIR)/qstamp.o $(LIBS)
 
 $(BIN_DIR)/%.d : %.c

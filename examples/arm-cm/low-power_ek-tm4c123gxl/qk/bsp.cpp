@@ -1,7 +1,7 @@
-//****************************************************************************
+//============================================================================
 // Product: "Low-Power" example, preemptive QK kernel
-// Last Updated for Version: 6.4.0
-// Date of the Last Update:  2019-02-25
+// Last Updated for Version: 7.3.0
+// Date of the Last Update:  2023-09-01
 //
 //                    Q u a n t u m  L e a P s
 //                    ------------------------
@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "low_power.hpp"
 #include "bsp.hpp"
@@ -74,21 +74,21 @@ enum {
 // ISRs used in this project =================================================
 void SysTick_Handler(void) {
     QK_ISR_ENTRY();   // inform QK about entering an ISR
-    QP::QF::TICK_X(0U, nullptr); // process time events for rate 0
+    QP::QTimeEvt::TICK_X(0U, nullptr); // process time events for rate 0
     QK_ISR_EXIT();  // inform QK about exiting an ISR
 }
 //............................................................................
 void Timer0A_IRQHandler(void) {
     QK_ISR_ENTRY();   // inform QK about entering an ISR
     TIMER0->ICR |= (1U << 0); // clear the Timer0 interrupt source
-    QP::QF::TICK_X(1U, nullptr); // process time events for rate 1
+    QP::QTimeEvt::TICK_X(1U, nullptr); // process time events for rate 1
     QK_ISR_EXIT();  // inform QK about exiting an ISR
 }
 //............................................................................
 void GPIOPortF_IRQHandler(void) {
     QK_ISR_ENTRY();  // inform QK about entering an ISR
     if ((GPIOF->RIS & BTN_SW1) != 0U) { // interrupt caused by SW1?
-        static QP::QEvt const pressedEvt = { BTN_PRESSED_SIG, 0U, 0U};
+        static QP::QEvt const pressedEvt(BTN_PRESSED_SIG);
         QP::QF::PUBLISH(&pressedEvt, nullptr);
     }
     GPIOF->ICR = 0xFFU; // clear interrupt sources
@@ -102,10 +102,7 @@ void BSP_init(void) {
                        SYSCTL_XTAL_16MHZ);
     SystemCoreClock = XTAL_HZ;
 
-    // FPU ( Floating Point Unit) configuration for QK
-    // Use the automatic FPU state preservation and the FPU lazy stacking.
-    //
-    FPU->FPCCR |= (1U << FPU_FPCCR_ASPEN_Pos) | (1U << FPU_FPCCR_LSPEN_Pos);
+    // NOTE: The VFP (hardware Floating Point) unit is configured by QK
 
     // enable clock for to the peripherals used by this application...
     SYSCTL->RCGCGPIO  |= (1U << 5);  // enable Run mode for GPIOF
@@ -161,10 +158,10 @@ void BSP_tickRate0_on(void) {
 }
 //............................................................................
 void BSP_tickRate1_on(void) {
-    SYSCTL->RCGCTIMER |= (1U << 0); // enable Run mode for Timer0
-    TIMER0->CTL  &= ~(1U << 0); // disable Timer0 before any changes
-    TIMER0->IMR  |= (1U << 0);  // enable timer interrupt
-    TIMER0->CTL  |= (1U << 0);  // enable Timer0 after the changes
+    SYSCTL->RCGCTIMER |= (1U << 0U); // enable Run mode for Timer0
+    TIMER0->CTL  &= ~(1U << 0U); // disable Timer0 before any changes
+    TIMER0->IMR  |= (1U << 0U);  // enable timer interrupt
+    TIMER0->CTL  |= (1U << 0U);  // enable Timer0 after the changes
     l_activeSet  |= (1U << TIMER0_ACTIVE);
 }
 
@@ -200,18 +197,18 @@ void QF::onCleanup(void) {
 void QK::onIdle(void) {
     QF_INT_DISABLE();
     if (((l_activeSet & (1U << SYSTICK_ACTIVE)) != 0U) // rate-0 enabled?
-        && QP::QF::noTimeEvtsActiveX(0U))  // no time events at rate-0?
+        && QP::QTimeEvt::noActive(0U))  // no time events at rate-0?
     {
         // safe to disable SysTick and interrupt
         SysTick->CTRL &= ~(SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_ENABLE_Msk);
         l_activeSet &= ~(1U << SYSTICK_ACTIVE); // mark rate-0 as disabled
     }
     if (((l_activeSet & (1U << TIMER0_ACTIVE)) != 0U) // rate-1 enabled?
-        && QP::QF::noTimeEvtsActiveX(1U))  // no time events at rate-1?
+        && QP::QTimeEvt::noActive(1U))  // no time events at rate-1?
     {
         // safe to disable Timer0 and interrupt
-        TIMER0->CTL  &= ~(1U << 0); // disable Timer0
-        TIMER0->IMR  &= ~(1U << 0); // disable timer interrupt
+        TIMER0->CTL  &= ~(1U << 0U); // disable Timer0
+        TIMER0->IMR  &= ~(1U << 0U); // disable timer interrupt
         l_activeSet &= ~(1U << TIMER0_ACTIVE); // mark rate-1 as disabled
     }
     QF_INT_ENABLE();
@@ -221,12 +218,16 @@ void QK::onIdle(void) {
     GPIOF->DATA_Bits[LED_RED] = 0x00U; // turn LED off, see NOTE2
 }
 
+} // namespace QP
+
 //............................................................................
-extern "C" Q_NORETURN Q_onAssert(char const * const module, int_t const loc) {
+extern "C" {
+
+Q_NORETURN Q_onError(char const * const module, int_t const id) {
     // NOTE: add here your application-specific error handling
     //
     (void)module;
-    (void)loc;
+    (void)id;
 #ifndef NDEBUG
     // for debugging, hang on in an endless loop toggling the RED LED...
     while (GPIOF->DATA_Bits[BTN_SW1] != 0) {
@@ -236,10 +237,15 @@ extern "C" Q_NORETURN Q_onAssert(char const * const module, int_t const loc) {
 #endif
     NVIC_SystemReset();
 }
+//............................................................................
+void assert_failed(char const * const module, int_t const id); // prototype
+void assert_failed(char const * const module, int_t const id) {
+    Q_onError(module, id);
+}
 
-} // namespace QP
+} // extern "C"
 
-//****************************************************************************
+//============================================================================
 // NOTE1:
 // The bitmask l_activeSet is **shared** between the QK idle thread and
 // the application-level threads. Therefore this variable needs to be

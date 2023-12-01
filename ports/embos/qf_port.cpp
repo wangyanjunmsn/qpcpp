@@ -1,55 +1,43 @@
-/// @file
-/// @brief QF/C++ port to embOS RTOS kernel, all supported compilers
-/// @cond
-////**************************************************************************
-/// Last updated for version 6.9.3
-/// Last updated on  2021-04-09
-///
-///                    Q u a n t u m  L e a P s
-///                    ------------------------
-///                    Modern Embedded Software
-///
-/// Copyright (C) 2005-2021 Quantum Leaps. All rights reserved.
-///
-/// This program is open source software: you can redistribute it and/or
-/// modify it under the terms of the GNU General Public License as published
-/// by the Free Software Foundation, either version 3 of the License, or
-/// (at your option) any later version.
-///
-/// Alternatively, this program may be distributed and modified under the
-/// terms of Quantum Leaps commercial licenses, which expressly supersede
-/// the GNU General Public License and are specifically designed for
-/// licensees interested in retaining the proprietary status of their code.
-///
-/// This program is distributed in the hope that it will be useful,
-/// but WITHOUT ANY WARRANTY; without even the implied warranty of
-/// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-/// GNU General Public License for more details.
-///
-/// You should have received a copy of the GNU General Public License
-/// along with this program. If not, see <www.gnu.org/licenses>.
-///
-/// Contact information:
-/// <www.state-machine.com/licensing>
-/// <info@state-machine.com>
-////**************************************************************************
-/// @endcond
+//============================================================================
+// QP/C++ Real-Time Embedded Framework (RTEF)
+// Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-QL-commercial
+//
+// This software is dual-licensed under the terms of the open source GNU
+// General Public License version 3 (or any later version), or alternatively,
+// under the terms of one of the closed source Quantum Leaps commercial
+// licenses.
+//
+// The terms of the open source GNU General Public License version 3
+// can be found at: <www.gnu.org/licenses/gpl-3.0>
+//
+// The terms of the closed source Quantum Leaps commercial licenses
+// can be found at: <www.state-machine.com/licensing>
+//
+// Redistributions in source code must retain this top-level comment block.
+// Plagiarizing this software to sidestep the license obligations is illegal.
+//
+// Contact information:
+// <www.state-machine.com>
+// <info@state-machine.com>
+//============================================================================
+//! @date Last updated on: 2023-11-15
+//! @version Last updated for: @ref qpcpp_7_3_1
+//!
+//! @file
+//! @brief QF/C++ port to embOS RTOS kernel, generic C++11 compiler
 
 #define QP_IMPL             // this is QP implementation
-#include "qf_port.hpp"      // QF port
-#include "qf_pkg.hpp"
-#include "qassert.h"
+#include "qp_port.hpp"      // QP port
+#include "qp_pkg.hpp"       // QP package-scope interface
+#include "qsafe.h"          // QP Functional Safety (FuSa) Subsystem
 #ifdef Q_SPY                // QS software tracing enabled?
     #include "qs_port.hpp"  // QS port
     #include "qs_pkg.hpp"   // QS package-scope internal interface
 #else
     #include "qs_dummy.hpp" // disable the QS software tracing
 #endif // Q_SPY
-
-// namespace QP ==============================================================
-namespace QP {
-
-Q_DEFINE_THIS_MODULE("qf_port")
 
 //............................................................................
 // define __TARGET_FPU_VFP symbol depending on the compiler...
@@ -65,79 +53,118 @@ Q_DEFINE_THIS_MODULE("qf_port")
     #endif
 #endif
 
-//............................................................................
-void QF::init(void) {
-    OS_InitKern();  // initialize embOS
-    OS_InitHW();    // initialize the hardware used by embOS
-}
-//............................................................................
-int_t QF::run(void) {
-    onStartup();     // QF callback to configure and start interrupts
+//============================================================================
+namespace { // anonymous namespace with local definitions
 
-    // produce the QS_QF_RUN trace record
-    QS_CRIT_STAT_
-    QS_BEGIN_PRE_(QS_QF_RUN, 0U)
-    QS_END_PRE_()
-
-    OS_Start();      // start embOS multitasking
-    Q_ERROR_ID(100); // OS_Start() should never return
-    return 0;       // dummy return to make the compiler happy
-}
-//............................................................................
-void QF::stop(void) {
-    onCleanup();  // cleanup callback
-}
-
-// thread for active objects -------------------------------------------------
-void QF::thread_(QActive *act) {
-    // event-loop
-    for (;;) { // for-ever
-        QEvt const *e = act->get_(); // wait for event
-        act->dispatch(e, act->m_prio); // dispatch to the AO's state machine
-        gc(e); // check if the event is garbage, and collect it if so
-    }
-}
+Q_DEFINE_THIS_MODULE("qf_port")
 
 //............................................................................
+static void thread_function(void *pVoid); // prototype
 static void thread_function(void *pVoid) { // embOS signature
-    QActive *act = reinterpret_cast<QActive *>(pVoid);
+    QP::QActive * const act = reinterpret_cast<QP::QActive *>(pVoid);
 
 #ifdef __TARGET_FPU_VFP
     // does the task use the FPU? see NOTE1
-    if ((act->getOsObject() & TASK_USES_FPU) != 0U) {
+    if ((act->getOsObject() & QP::TASK_USES_FPU) != 0U) {
         OS_ExtendTaskContext_VFP();
     }
 #endif  // __TARGET_FPU_VFP
 
-    QF::thread_(act);
-    QF::remove_(act); // remove this object from QF
-    OS_TerminateTask(&act->getThread());
+    QP::QActive::evtLoop_(act);
+}
+
+} // anonymous namespace
+
+// namespace QP ==============================================================
+namespace QP {
+
+//............................................................................
+void QF::init() {
+    OS_InitKern();  // initialize embOS
+    OS_InitHW();    // initialize the hardware used by embOS
 }
 //............................................................................
-void QActive::start(std::uint_fast8_t const prio,
+int QF::run() {
+    onStartup();    // QF callback to configure and start interrupts
+
+    // produce the QS_QF_RUN trace record
+    QS_CRIT_STAT
+    QS_CRIT_ENTRY();
+    QS_BEGIN_PRE_(QS_QF_RUN, 0U)
+    QS_END_PRE_()
+    QS_CRIT_EXIT();
+
+    OS_Start(); // start embOS multitasking
+
+    return 0; // this unreachable return keeps the compiler happy
+}
+//............................................................................
+void QF::stop() {
+    onCleanup();  // cleanup callback
+}
+
+// thread for active objects -------------------------------------------------
+void QActive::evtLoop_(QActive *act) {
+    for (;;) { // for-ever
+        QEvt const *e = act->get_(); // wait for event
+        act->dispatch(e, act->m_prio); // dispatch to the AO's state machine
+        QF::gc(e); // check if the event is garbage, and collect it if so
+    }
+    //act->unregister_(); // remove this object from QF
+    //OS_TerminateTask(&act->m_thread);
+}
+
+//............................................................................
+void QActive::start(QPrioSpec const prioSpec,
                     QEvt const * * const qSto, std::uint_fast16_t const qLen,
                     void * const stkSto, std::uint_fast16_t const stkSize,
                     void const * const par)
 {
     // create the embOS message box for the AO
-    OS_CreateMB(&m_eQueue,
+    OS_MAILBOX_Create(&m_eQueue,
                 static_cast<OS_U16>(sizeof(QEvt *)),
                 static_cast<OS_UINT>(qLen),
                 static_cast<void *>(&qSto[0]));
 
-    m_prio = prio;  // save the QF priority
-    QF::add_(this); // make QF aware of this active object
-    init(par, m_prio); // take the top-most initial tran.
-    QS_FLUSH();     // flush the trace buffer to the host
+    m_prio  = static_cast<std::uint8_t>(prioSpec & 0xFFU); // QF-priority
+    m_pthre = 0U; // preemption-threshold (not used)
+    register_(); // make QF aware of this AO
+
+    // top-most initial tran. (virtual call)
+    init(par, m_prio);
+    QS_FLUSH(); // flush the trace buffer to the host
+
+    // The embOS priority of the AO thread can be specificed in two ways:
+    //
+    // 1. Implictily based on the AO's priority (embOS uses the same
+    //    priority numbering scheme as QP). This option is chosen when
+    //    the higher-byte of the prioSpec parameter is set to zero.
+    //
+    // 2. Explicitly as the higher-byte of the prioSpec parameter.
+    //    This option is chosen when the prioSpec parameter is not-zero.
+    //    For example, Q_PRIO(10U, 5U) will explicitly specify AO priority
+    //    as 10 and embOS priority as 5.
+    //
+    //    NOTE: The explicit embOS priority is NOT sanity-checked,
+    //    so it is the responsibility of the application to ensure that
+    //    it is consistent witht the AO's priority. An example of
+    //    inconsistent setting would be assigning embOS priorities that
+    //    would result in a different relative priritization of AO's threads
+    //    than indicated by the AO priorities assigned.
+    //
+    OS_PRIO embos_prio = (prioSpec >> 8U);
+    if (embos_prio == 0U) {
+        embos_prio = me->prio;
+    }
 
     // create an embOS task for the AO
-    OS_CreateTaskEx(&m_thread,
+    OS_TASK_CreateEx(&m_thread,
 #if (OS_TRACKNAME != 0)
                     m_thread.Name, // the configured task name
 #elif
                     "AO",          // a generic AO task name
 #endif
-        static_cast<OS_PRIO>(prio), // embOS uses same numbering as QP
+        embos_prio,                // embOS priority
         &thread_function,
         static_cast<void OS_STACKPTR *>(stkSto),
         static_cast<OS_UINT>(stkSize),
@@ -145,45 +172,43 @@ void QActive::start(std::uint_fast8_t const prio,
         this);
 }
 //............................................................................
-void QActive::setAttr(std::uint32_t attr1, void const *attr2) {
+void QActive::setAttr(std::uint32_t const attr1, void const *attr2) {
+    QF_CRIT_STAT
+    QF_CRIT_ENTRY();
     switch (attr1) {
-        case TASK_NAME_ATTR:
+        case TASK_NAME_ATTR: {
 #if (OS_TRACKNAME != 0)
-            Q_ASSERT_ID(300, m_thread.Name == nullptr);
-            m_thread.Name = static_cast<char_t const *>(attr2);
+            Q_ASSERT_INCRIT(300, m_thread.Name == nullptr);
+            m_thread.Name = static_cast<char const *>(attr2);
 #endif
             break;
+        }
         case TASK_USES_FPU:
             m_osObject = attr1;
             break;
-        /* ... */
+        // ...
         default:
             break;
     }
+    QF_CRIT_EXIT();
 }
 //............................................................................
-#ifndef Q_SPY
-bool QActive::post_(QEvt const * const e,
-                    std::uint_fast16_t const margin) noexcept
-#else
 bool QActive::post_(QEvt const * const e, std::uint_fast16_t const margin,
-                     void const * const sender) noexcept
-#endif
+                    void const * const sender) noexcept
 {
-    std::uint_fast16_t nFree;
+    QF_CRIT_STAT
+    QF_CRIT_ENTRY();
+    std::uint_fast16_t nFree =
+        static_cast<std::uint_fast16_t>(m_eQueue.maxMsg - m_eQueue.nofMsg);
+
     bool status;
-    QF_CRIT_STAT_
-
-    QF_CRIT_E_();
-    nFree = static_cast<std::uint_fast16_t>(m_eQueue.maxMsg - m_eQueue.nofMsg);
-
-    if (margin == QF_NO_MARGIN) {
+    if (margin == QF::NO_MARGIN) {
         if (nFree > 0U) {
             status = true; // can post
         }
         else {
             status = false; // cannot post
-            Q_ERROR_ID(510); // must be able to post the event
+            Q_ERROR_INCRIT(510); // must be able to post the event
         }
     }
     else if (nFree > static_cast<QEQueueCtr>(margin)) {
@@ -195,102 +220,106 @@ bool QActive::post_(QEvt const * const e, std::uint_fast16_t const margin,
 
     if (status) { // can post the event?
 
-        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST, m_prio)
-            QS_TIME_PRE_();        // timestamp
-            QS_OBJ_PRE_(sender);   // the sender object
-            QS_SIG_PRE_(e->sig);   // the signal of the event
-            QS_OBJ_PRE_(this);     // this active object (recipient)
-            QS_2U8_PRE_(e->poolId_, e->refCtr_); // pool Id & ref Count
-            QS_EQC_PRE_(nFree);    // # free entries
-            QS_EQC_PRE_(0U);       // min # free (unknown)
-        QS_END_NOCRIT_PRE_()
+        QS_BEGIN_PRE_(QS_QF_ACTIVE_POST, m_prio)
+            QS_TIME_PRE_();      // timestamp
+            QS_OBJ_PRE_(sender); // the sender object
+            QS_SIG_PRE_(e->sig); // the signal of the event
+            QS_OBJ_PRE_(this);   // this active object (recipient)
+            QS_2U8_PRE_(e->getPoolId_(), e->refCtr_); // pool-Id&ref-Count
+            QS_EQC_PRE_(nFree);  // # free entries
+            QS_EQC_PRE_(0U);     // min # free entries (unknown)
+        QS_END_PRE_()
 
-        if (e->poolId_ != 0U) {     // is it a pool event?
-            QF_EVT_REF_CTR_INC_(e); // increment the reference counter
+        if (e->getPoolId_() != 0U) { // is it a pool event?
+            QEvt_refCtr_inc_(e); // increment the reference counter
         }
+        QF_CRIT_EXIT();
 
-        QF_CRIT_X_();
-
+        char err = OS_MAILBOX_Put(&m_eQueue,
+                                  static_cast<OS_CONST_PTR void *>(&e));
+        QF_CRIT_ENTRY();
         // posting to the embOS mailbox must succeed, see NOTE3
-        Q_ALLEGE_ID(520,
-            OS_PutMailCond(&m_eQueue, static_cast<OS_CONST_PTR void *>(&e))
-            == 0);
+        Q_ASSERT_INCRIT(520, err == '\0');
     }
     else {
 
-        QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, m_prio)
-            QS_TIME_PRE_();             // timestamp
-            QS_OBJ_PRE_(sender);        // the sender object
-            QS_SIG_PRE_(e->sig);        // the signal of the event
-            QS_OBJ_PRE_(this);          // this active object (recipient)
-            QS_2U8_PRE_(e->poolId_, e->refCtr_); // pool Id & ref Count
-            QS_EQC_PRE_(nFree);         // # free entries
-            QS_EQC_PRE_(0U);            // min # free (unknown)
-        QS_END_NOCRIT_PRE_()
+        QS_BEGIN_PRE_(QS_QF_ACTIVE_POST_ATTEMPT, m_prio)
+            QS_TIME_PRE_();      // timestamp
+            QS_OBJ_PRE_(sender); // the sender object
+            QS_SIG_PRE_(e->sig); // the signal of the event
+            QS_OBJ_PRE_(this);   // this active object (recipient)
+            QS_2U8_PRE_(e->getPoolId_(), e->refCtr_); // pool-Id&ref-Count
+            QS_EQC_PRE_(nFree);  // # free entries
+            QS_EQC_PRE_(margin); // margin requested
+        QS_END_PRE_()
 
-        QF_CRIT_X_();
     }
+    QF_CRIT_EXIT();
 
     return status;
 }
 //............................................................................
 void QActive::postLIFO(QEvt const * const e) noexcept {
-    QF_CRIT_STAT_
-    QF_CRIT_E_();
+    QF_CRIT_STAT
+    QF_CRIT_ENTRY();
 
-    QS_BEGIN_NOCRIT_PRE_(QS_QF_ACTIVE_POST_LIFO, m_prio)
-        QS_TIME_PRE_();             // timestamp
-        QS_SIG_PRE_(e->sig);        // the signal of this event
-        QS_OBJ_PRE_(this);          // this active object
-        QS_2U8_PRE_(e->poolId_, e->refCtr_); // pool Id & ref Count
+    QS_BEGIN_PRE_(QS_QF_ACTIVE_POST_LIFO, m_prio)
+        QS_TIME_PRE_();          // timestamp
+        QS_SIG_PRE_(e->sig);     // the signal of this event
+        QS_OBJ_PRE_(this);       // this active object
+        QS_2U8_PRE_(e->getPoolId_(), e->refCtr_); // pool-Id&ref-Count
         QS_EQC_PRE_(m_eQueue.maxMsg - m_eQueue.nofMsg); // # free entries
-        QS_EQC_PRE_(0U); // min # free entries (unknown)
-    QS_END_NOCRIT_PRE_()
+        QS_EQC_PRE_(0U);         // min # free entries (unknown)
+    QS_END_PRE_()
 
-    if (e->poolId_ != 0U) {     // is it a pool event?
-        QF_EVT_REF_CTR_INC_(e); // increment the reference counter
+    if (e->getPoolId_() != 0U) { // is it a pool event?
+        QEvt_refCtr_inc_(e); // increment the reference counter
     }
+    QF_CRIT_EXIT();
 
-    QF_CRIT_X_();
-
+    char err = OS_MAILBOX_PutFront(&m_eQueue,
+                                   static_cast<OS_CONST_PTR void *>(&e));
+    QF_CRIT_ENTRY();
     // posting to the embOS mailbox must succeed, see NOTE3
-    Q_ALLEGE_ID(810,
-        OS_PutMailFrontCond(&m_eQueue, static_cast<OS_CONST_PTR void *>(&e))
-        == static_cast<char>(0));
+    Q_ASSERT_INCRIT(610, err == '\0');
+    QF_CRIT_EXIT();
 }
 //............................................................................
 QEvt const *QActive::get_(void) noexcept {
     QEvt const *e;
-    QS_CRIT_STAT_
+    OS_MAILBOX_GetBlocked(&m_eQueue, static_cast<void *>(&e));
 
-    OS_GetMail(&m_eQueue, &e);
-
+    QS_CRIT_STAT
+    QS_CRIT_ENTRY();
     QS_BEGIN_PRE_(QS_QF_ACTIVE_GET, m_prio)
-        QS_TIME_PRE_();             // timestamp
-        QS_SIG_PRE_(e->sig);        // the signal of this event
-        QS_OBJ_PRE_(this);          // this active object
-        QS_2U8_PRE_(e->poolId_, e->refCtr_); // pool Id & ref Count
-        QS_EQC_PRE_(m_eQueue.maxMsg - m_eQueue.nofMsg); // # free entries
+        QS_TIME_PRE_();          // timestamp
+        QS_SIG_PRE_(e->sig);     // the signal of this event
+        QS_OBJ_PRE_(this);       // this active object
+        QS_2U8_PRE_(e->getPoolId_(), e->refCtr_); // pool-Id&ref-Count
+        QS_EQC_PRE_(m_eQueue.maxMsg - m_eQueue.nofMsg); // # free
     QS_END_PRE_()
+    QS_CRIT_EXIT();
 
     return e;
 }
 
 } // namespace QP
 
-//****************************************************************************
+//============================================================================
 // NOTE1:
 // In case of hardware-supported floating point unit (FPU), a task must
-// preserve the FPU registers accross the context switch. However, this
+// preserve the FPU registers across the context switch. However, this
 // additional overhead is necessary only for tasks that actually use the
 // FPU. In this QP-embOS port, an active object task that uses the FPU is
-// designated by the QF_TASK_USES_FPU attribute, which can be set wiht the
+// designated by the QF_TASK_USES_FPU attribute, which can be set with the
 // QF_setEmbOsTaskAttr() function. The task attributes must be set *before*
-// calling QACTIVE_START(). The task attributes are saved in
-// QActive.m_osObject member.
+// calling QActive::start(). The task attributes are saved in QActive.osObject
+// member.
 //
 // NOTE3:
-// The event posting to embOS mailbox occurs inside a critical section,
-// but this is OK, because the QF/embOS critical sections are designed
-// to nest.
+// The event posting to embOS mailbox occurs OUTSIDE critical section,
+// which means that the remaining margin of available slots in the queue
+// cannot be guaranteed. The problem is that interrupts and other tasks can
+// preempt the event posting after checking the margin, but before actually
+// posting the event to the queue.
 //

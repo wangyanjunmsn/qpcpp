@@ -1,52 +1,44 @@
-/// @file
-/// @brief QS/C++ port to Win32 API
-/// @ingroup ports
-/// @cond
-///***************************************************************************
-/// Last updated for version 6.9.3
-/// Last updated on  2021-03-16
-///
-///                    Q u a n t u m  L e a P s
-///                    ------------------------
-///                    Modern Embedded Software
-///
-/// Copyright (C) 2005-2021 Quantum Leaps. All rights reserved.
-///
-/// This program is open source software: you can redistribute it and/or
-/// modify it under the terms of the GNU General Public License as published
-/// by the Free Software Foundation, either version 3 of the License, or
-/// (at your option) any later version.
-///
-/// Alternatively, this program may be distributed and modified under the
-/// terms of Quantum Leaps commercial licenses, which expressly supersede
-/// the GNU General Public License and are specifically designed for
-/// licensees interested in retaining the proprietary status of their code.
-///
-/// This program is distributed in the hope that it will be useful,
-/// but WITHOUT ANY WARRANTY; without even the implied warranty of
-/// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-/// GNU General Public License for more details.
-///
-/// You should have received a copy of the GNU General Public License
-/// along with this program. If not, see <www.gnu.org/licenses>.
-///
-/// Contact information:
-/// <www.state-machine.com/licensing>
-/// <info@state-machine.com>
-///***************************************************************************
-/// @endcond
-///
+//============================================================================
+// QP/C++ Real-Time Embedded Framework (RTEF)
+// Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later OR LicenseRef-QL-commercial
+//
+// This software is dual-licensed under the terms of the open source GNU
+// General Public License version 3 (or any later version), or alternatively,
+// under the terms of one of the closed source Quantum Leaps commercial
+// licenses.
+//
+// The terms of the open source GNU General Public License version 3
+// can be found at: <www.gnu.org/licenses/gpl-3.0>
+//
+// The terms of the closed source Quantum Leaps commercial licenses
+// can be found at: <www.state-machine.com/licensing>
+//
+// Redistributions in source code must retain this top-level comment block.
+// Plagiarizing this software to sidestep the license obligations is illegal.
+//
+// Contact information:
+// <www.state-machine.com>
+// <info@state-machine.com>
+//============================================================================
+//! @date Last updated on: 2023-08-18
+//! @version Last updated for: @ref qpcpp_7_3_0
+//!
+//! @file
+//! @brief QS/C++ port to Win32 API
+//!
 
 #ifndef Q_SPY
     #error "Q_SPY must be defined to compile qs_port.cpp"
 #endif // Q_SPY
 
-#define QP_IMPL         // this is QP implementation
-#include "qf_port.hpp"  // QF port
-#include "qassert.h"    // QP embedded systems-friendly assertions
-#include "qs_port.hpp"  // include QS port
+#define QP_IMPL             // this is QP implementation
+#include "qp_port.hpp"      // QP port
+#include "qsafe.h"          // QP Functional Safety (FuSa) Subsystem
+#include "qs_port.hpp"      // include QS port
 
-#include "safe_std.h"   // portable "safe" <stdio.h>/<string.h> facilities
+#include "safe_std.h"       // portable "safe" <stdio.h>/<string.h> facilities
 #include <stdlib.h>
 #include <time.h>
 #include <conio.h>
@@ -69,12 +61,17 @@
 #define QS_TX_CHUNK    QS_TX_SIZE
 #define QS_TIMEOUT_MS  10
 
-namespace QP {
+namespace { // unnamed local namespace
 
 //Q_DEFINE_THIS_MODULE("qs_port")
 
 // local variables ...........................................................
 static SOCKET l_sock = INVALID_SOCKET;
+
+} // unnamed local namespace
+
+//============================================================================
+namespace QP {
 
 //............................................................................
 bool QS::onStartup(void const *arg) {
@@ -203,7 +200,7 @@ void QS::onReset(void) {
 void QS::onFlush(void) {
     uint16_t nBytes;
     uint8_t const *data;
-    QS_CRIT_STAT_
+    QS_CRIT_STAT
 
     if (l_sock == INVALID_SOCKET) { // socket NOT initialized?
         FPRINTF_S(stderr, "%s\n", "<TARGET> ERROR   invalid TCP socket");
@@ -211,9 +208,9 @@ void QS::onFlush(void) {
     }
 
     nBytes = QS_TX_CHUNK;
-    QS_CRIT_E_();
+    QS_CRIT_ENTRY();
     while ((data = getBlock(&nBytes)) != (uint8_t *)0) {
-        QS_CRIT_X_();
+        QS_CRIT_EXIT();
         for (;;) { // for-ever until break or return
             int nSent = send(l_sock, (char const *)data, (int)nBytes, 0);
             if (nSent == SOCKET_ERROR) { // sending failed?
@@ -243,9 +240,9 @@ void QS::onFlush(void) {
         }
         // set nBytes for the next call to QS::getBlock()
         nBytes = QS_TX_CHUNK;
-        QS_CRIT_E_();
+        QS_CRIT_ENTRY();
     }
-    QS_CRIT_X_();
+    QS_CRIT_EXIT();
 }
 //............................................................................
 QSTimeCtr QS::onGetTime(void) {
@@ -255,10 +252,10 @@ QSTimeCtr QS::onGetTime(void) {
 }
 
 //............................................................................
-void QS_output(void) {
+void QS::doOutput(void) {
     uint16_t nBytes;
     uint8_t const *data;
-    QS_CRIT_STAT_
+    QS_CRIT_STAT
 
     if (l_sock == INVALID_SOCKET) { // socket NOT initialized?
         FPRINTF_S(stderr, "%s\n", "<TARGET> ERROR   invalid TCP socket");
@@ -266,9 +263,9 @@ void QS_output(void) {
     }
 
     nBytes = QS_TX_CHUNK;
-    QS_CRIT_E_();
+    QS_CRIT_ENTRY();
     if ((data = QS::getBlock(&nBytes)) != (uint8_t *)0) {
-        QS_CRIT_X_();
+        QS_CRIT_EXIT();
         for (;;) { // for-ever until break or return
             int nSent = send(l_sock, (char const *)data, (int)nBytes, 0);
             if (nSent == SOCKET_ERROR) { // sending failed?
@@ -298,11 +295,11 @@ void QS_output(void) {
         }
     }
     else {
-        QS_CRIT_X_();
+        QS_CRIT_EXIT();
     }
 }
 //............................................................................
-void QS_rx_input(void) {
+void QS::doInput(void) {
     int status = recv(l_sock,
                       (char *)QS::rxPriv_.buf, (int)QS::rxPriv_.end, 0);
     if (status > 0) { // any data received?
@@ -313,4 +310,3 @@ void QS_rx_input(void) {
 }
 
 } // namespace QP
-

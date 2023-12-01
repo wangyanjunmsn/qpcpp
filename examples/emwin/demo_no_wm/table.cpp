@@ -1,4 +1,4 @@
-//////////////////////////////////////////////////////////////////////////////
+//============================================================================
 // Product: DPP example with emWin/uC/GUI, NO Window Manager
 // Last updated for version 6.8.0
 // Last updated on  2020-01-22
@@ -30,14 +30,14 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//////////////////////////////////////////////////////////////////////////////
+//============================================================================
 #include "qpcpp.hpp"
 #include "dpp.hpp"
 #include "bsp.hpp"
 
 extern "C" {
     #include "GUI.h"
-    #include "GUI_SIM.h"
+    #include "LCD_SIM.h"
     #include "DIALOG.h"
 }
 
@@ -109,7 +109,7 @@ static void displyPhilStat(uint8_t n, char const *stat) {
     l_philoStat[n] = stat;
     GUI_DispStringAt(stat,  l_xOrg + STATE_X, l_yOrg + l_philoY[n]);
 
-    QS_BEGIN_ID(PHILO_STAT, AO_Philo[n]->m_prio) // app-specific record begin
+    QS_BEGIN_ID(PHILO_STAT, AO_Philo[n]->getPrio()) // app-specific record begin
         QS_U8(1, n);  // Philosopher number
         QS_STR(stat); // Philosopher status
     QS_END()
@@ -123,7 +123,7 @@ static void displyTableStat(char const *stat) {
     l_tableState = stat;
     GUI_DispStringAt(stat,  l_xOrg + STATE_X, l_yOrg + l_tableY);
 
-    QS_BEGIN_ID(TABLE_STAT, AO_Table->m_prio) // app-specific record begin
+    QS_BEGIN_ID(TABLE_STAT, AO_Table->getPrio()) // app-specific record begin
         QS_STR(stat); // Philosopher status
     QS_END()
 }

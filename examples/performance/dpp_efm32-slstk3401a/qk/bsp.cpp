@@ -1,7 +1,7 @@
-///***************************************************************************
+//============================================================================
 // Product: DPP example, EFM32-SLSTK3401A board, preemptive QK kernel
-// Last updated for version 6.9.3
-// Last updated on  2021-03-03
+// Last updated for version 7.3.0
+// Last updated on  2023-09-10
 //
 //                    Q u a n t u m  L e a P s
 //                    ------------------------
@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "dpp.hpp"
 #include "bsp.hpp"
@@ -79,13 +79,39 @@ static uint32_t l_rnd; // random seed
 extern "C" {
 
 //............................................................................
+Q_NORETURN Q_onError(char const * const module, int_t const id) {
+    //
+    // NOTE: add here your application-specific error handling
+    //
+    (void)module;
+    (void)id;
+    QS_ASSERTION(module, id, 10000U);
+
+#ifndef NDEBUG
+    // light up both LEDs
+    GPIO->P[LED_PORT].DOUT |= ((1U << LED0_PIN) | (1U << LED1_PIN));
+    // for debugging, hang on in an endless loop until PB1 is pressed...
+    while ((GPIO->P[PB_PORT].DIN & (1U << PB1_PIN)) != 0) {
+    }
+#endif
+
+    NVIC_SystemReset();
+}
+//............................................................................
+void assert_failed(char const * const module, int const id); // prototype
+void assert_failed(char const * const module, int const id) {
+    Q_onError(module, id);
+}
+
+
+//............................................................................
 void SysTick_Handler(void); // prototype
 void SysTick_Handler(void) {
     // state of the button debouncing, see below
     static struct ButtonsDebouncing {
         uint32_t depressed;
         uint32_t previous;
-    } buttons = { ~0U, ~0U };
+    } buttons = { 0U, 0U };
     uint32_t current;
     uint32_t tmp;
 
@@ -98,7 +124,7 @@ void SysTick_Handler(void) {
     }
 #endif
 
-    QP::QF::TICK_X(0U, &l_SysTick_Handler); // process time events for rate 0
+    QP::QTimeEvt::TICK_X(0U, &l_SysTick_Handler); // process time events for rate 0
 
     // Perform the debouncing of buttons. The algorithm for debouncing
     // adapted from the book "Embedded Systems Dictionary" by Jack Ganssle
@@ -112,11 +138,11 @@ void SysTick_Handler(void) {
     tmp ^= buttons.depressed;     // changed debounced depressed
     if ((tmp & (1U << PB0_PIN)) != 0U) {  // debounced PB0 state changed?
         if ((buttons.depressed & (1U << PB0_PIN)) != 0U) { // PB0 depressed?
-            static QP::QEvt const pauseEvt = { DPP::PAUSE_SIG, 0U, 0U};
+            static QP::QEvt const pauseEvt(DPP::PAUSE_SIG);
             QP::QF::PUBLISH(&pauseEvt, &l_SysTick_Handler);
         }
         else {            // the button is released
-            static QP::QEvt const serveEvt = { DPP::SERVE_SIG, 0U, 0U};
+            static QP::QEvt const serveEvt(DPP::SERVE_SIG);
             QP::QF::PUBLISH(&serveEvt, &l_SysTick_Handler);
         }
     }
@@ -163,30 +189,7 @@ void BSP::init(void) {
     //
     SystemCoreClockUpdate();
 
-    // configure the FPU usage by choosing one of the options...
-#if 1
-    // OPTION 1:
-    // Use the automatic FPU state preservation and the FPU lazy stacking.
-    //
-    // NOTE:
-    // Use the following setting when FPU is used in more than one task or
-    // in any ISRs. This setting is the safest and recommended, but requires
-    // extra stack space and CPU cycles.
-    //
-    FPU->FPCCR |= (1U << FPU_FPCCR_ASPEN_Pos) | (1U << FPU_FPCCR_LSPEN_Pos);
-#else
-    // OPTION 2:
-    // Do NOT to use the automatic FPU state preservation and
-    // do NOT to use the FPU lazy stacking.
-    //
-    // NOTE:
-    // Use the following setting when FPU is used in ONE task only and not
-    // in any ISR. This setting is very efficient, but if more than one task
-    // (or ISR) start using the FPU, this can lead to corruption of the
-    // FPU registers. This option should be used with CAUTION.
-    //
-    FPU->FPCCR &= ~((1U << FPU_FPCCR_ASPEN_Pos) | (1U << FPU_FPCCR_LSPEN_Pos));
-#endif
+    // NOTE: The VFP (hardware Floating Point) unit is configured by QK
 
     // enable clock for to the peripherals used by this application...
     CMU_ClockEnable(cmuClock_HFPER, true);
@@ -229,7 +232,7 @@ void BSP::displayPhilStat(uint8_t n, char const *stat) {
         GPIO->P[LED_PORT].DOUT &=  ~(1U << LED0_PIN);
     }
 
-    QS_BEGIN_ID(PHILO_STAT, AO_Philo[n]->m_prio) // app-specific record begin
+    QS_BEGIN_ID(PHILO_STAT, AO_Philo[n]->getPrio()) // app-specific record begin
         QS_U8(1, n);  // Philosopher number
         QS_STR(stat); // Philosopher status
     QS_END()
@@ -329,26 +332,6 @@ void QK::onIdle(void) {
     //
     __WFI(); // Wait-For-Interrupt
 #endif
-}
-
-//............................................................................
-extern "C" Q_NORETURN Q_onAssert(char const * const module, int_t const loc) {
-    //
-    // NOTE: add here your application-specific error handling
-    //
-    (void)module;
-    (void)loc;
-    QS_ASSERTION(module, loc, static_cast<uint32_t>(10000U));
-
-#ifndef NDEBUG
-    // light up both LEDs
-    GPIO->P[LED_PORT].DOUT |= ((1U << LED0_PIN) | (1U << LED1_PIN));
-    // for debugging, hang on in an endless loop until PB1 is pressed...
-    while ((GPIO->P[PB_PORT].DIN & (1U << PB1_PIN)) != 0) {
-    }
-#endif
-
-    NVIC_SystemReset();
 }
 
 // QS callbacks ==============================================================
@@ -451,7 +434,6 @@ void QS::onReset(void) {
 }
 //............................................................................
 //! callback function to execute a user command (to be implemented in BSP)
-extern "C" void assert_failed(char const *module, int loc);
 void QS::onCommand(uint8_t cmdId, uint32_t param1,
                    uint32_t param2, uint32_t param3)
 {
@@ -464,10 +446,6 @@ void QS::onCommand(uint8_t cmdId, uint32_t param1,
         QS_U8(2, cmdId);
         QS_U32(8, param1);
     QS_END()
-
-    if (cmdId == 10U) {
-        assert_failed("QS_onCommand", 11);
-    }
 }
 
 #endif // Q_SPY
@@ -475,7 +453,7 @@ void QS::onCommand(uint8_t cmdId, uint32_t param1,
 
 } // namespace QP
 
-//****************************************************************************
+//============================================================================
 // NOTE1:
 // The QF_AWARE_ISR_CMSIS_PRI constant from the QF port specifies the highest
 // ISR priority that is disabled by the QF framework. The value is suitable

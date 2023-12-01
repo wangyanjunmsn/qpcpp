@@ -1,13 +1,13 @@
 ##############################################################################
 # Product: Makefile for QUTEST-QP/C++ for Windows and POSIX *HOSTS*
-# Last updated for version 6.9.0
-# Last updated on  2020-08-11
+# Last Updated for Version: 7.2.0
+# Date of the Last Update:  2022-12-21
 #
 #                    Q u a n t u m  L e a P s
 #                    ------------------------
 #                    Modern Embedded Software
 #
-# Copyright (C) 2005-2020 Quantum Leaps, LLC. All rights reserved.
+# Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
 #
 # This program is open source software: you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as published
@@ -94,13 +94,7 @@ DEFINES  :=
 #-----------------------------------------------------------------------------
 # add QP/C++ framework (depends on the OS this Makefile runs on):
 #
-ifeq ($(OS),Windows_NT)
-	QP_PORT_DIR := $(QPCPP)/ports/win32-qutest
-	LIB_DIRS += -L$(QP_PORT_DIR)/mingw
-	LIBS     += -lqp -lws2_32
-else
-	QP_PORT_DIR := $(QPCPP)/ports/posix-qutest
-	CPP_SRCS += \
+CPP_SRCS += \
 	qep_hsm.cpp \
 	qep_msm.cpp \
 	qf_act.cpp \
@@ -120,14 +114,23 @@ else
 	qutest.cpp \
 	qutest_port.cpp
 
-	LIBS += -lpthread
+ifeq ($(OS),Windows_NT)
+
+QP_PORT_DIR := $(QPCPP)/ports/win32-qutest
+LIBS += -lws2_32
+
+else
+
+QP_PORT_DIR := $(QPCPP)/ports/posix-qutest
+LIBS += -lpthread
+
 endif
 
 #============================================================================
 # Typically you should not need to change anything below this line
 
 VPATH    += $(QPCPP)/src/qf $(QPCPP)/src/qs $(QP_PORT_DIR)
-INCLUDES += -I$(QPCPP)/include -I$(QPCPP)/src -I$(QP_PORT_DIR)
+INCLUDES += -I$(QPCPP)/include -I$(QP_PORT_DIR)
 
 #-----------------------------------------------------------------------------
 # GNU toolset:
@@ -148,8 +151,6 @@ LINK  := g++   # for C++ programs
 ifeq ("$(wildcard $(QUTEST))","")
 QUTEST := python3 $(QTOOLS)/qutest/qutest.py
 endif
-
-TESTS  := *.py
 
 #-----------------------------------------------------------------------------
 # basic utilities (depends on the OS this Makefile runs on):
@@ -173,7 +174,7 @@ endif
 
 BIN_DIR := build
 
-CFLAGS  := -c -g -O -fno-pie -std=c99 -pedantic -Wall -Wextra -W \
+CFLAGS  := -c -g -O -fno-pie -std=c11 -pedantic -Wall -Wextra -W \
 	$(INCLUDES) $(DEFINES) -DQ_SPY -DQ_UTEST -DQ_HOST
 
 CPPFLAGS := -c -g -O -fno-pie -std=c++11 -pedantic -Wall -Wextra \
@@ -200,7 +201,6 @@ C_DEPS_EXT   := $(patsubst %.o,%.d, $(C_OBJS_EXT))
 CPP_OBJS_EXT := $(addprefix $(BIN_DIR)/, $(CPP_OBJS))
 CPP_DEPS_EXT := $(patsubst %.o,%.d, $(CPP_OBJS_EXT))
 
-
 #-----------------------------------------------------------------------------
 # rules
 #
@@ -215,11 +215,11 @@ all : $(TARGET_EXE) run
 endif
 
 $(TARGET_EXE) : $(C_OBJS_EXT) $(CPP_OBJS_EXT)
-	$(CPP) $(CPPFLAGS) $(QPCPP)/include/qstamp.cpp -o $(BIN_DIR)/qstamp.o
+	$(CPP) $(CPPFLAGS) $(QPCPP)/src/qs/qstamp.cpp -o $(BIN_DIR)/qstamp.o
 	$(LINK) $(LINKFLAGS) $(LIB_DIRS) -o $@ $^ $(BIN_DIR)/qstamp.o $(LIBS)
 
 run : $(TARGET_EXE)
-	$(QUTEST) $(TESTS) $(TARGET_EXE) $(HOST)
+	$(QUTEST) -e$(TARGET_EXE) -q$(QSPY) -l$(LOG) -o$(OPT) -- $(TESTS)
 
 $(BIN_DIR)/%.d : %.cpp
 	$(CPP) -MM -MT $(@:.d=.o) $(CPPFLAGS) $< > $@
@@ -246,7 +246,7 @@ endif
 endif
 
 debug :
-	$(QUTEST) $(TESTS) DEBUG $(HOST)
+	$(QUTEST) -edebug -q$(QSPY) -l$(LOG) -o$(OPT) -- $(TESTS)
 
 clean :
 	-$(RM) $(BIN_DIR)/*.*

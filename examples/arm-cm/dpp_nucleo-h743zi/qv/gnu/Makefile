@@ -1,13 +1,13 @@
 ##############################################################################
-# Product: Makefile for QP/C++ on STM32F746G-Discovery, QV kernel, GNU-ARM
-# Last Updated for Version: 6.9.4
-# Date of the Last Update:  2021-07-01
+# Product: Makefile for QP/C++ on NUCLEO-H743ZI, QV kernel, GNU-ARM
+# Last Updated for Version: 7.3.0
+# Date of the Last Update:  2023-09-10
 #
 #                    Q u a n t u m  L e a P s
 #                    ------------------------
 #                    Modern Embedded Software
 #
-# Copyright (C) 2005-2021 Quantum Leaps, LLC. All rights reserved.
+# Copyright (C) 2005 Quantum Leaps, LLC. All rights reserved.
 #
 # This program is open source software: you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as published
@@ -45,7 +45,7 @@
 # NOTE:
 # To use this Makefile on Windows, you will need the GNU make utility, which
 # is included in the Qtools collection for Windows, see:
-#    https://sourceforge.net/projects/qpc/files/QTools/
+#    https://github.com/QuantumLeaps/qtools/releases
 #
 
 #-----------------------------------------------------------------------------
@@ -73,21 +73,20 @@ VPATH = \
 	$(QPCPP)/src/qv \
 	$(QPCPP)/src/qs \
 	$(QP_PORT_DIR) \
-	$(QPCPP)/3rd_party/nucleo-h743zi \
-	$(QPCPP)/3rd_party/nucleo-h743zi/gnu \
-	$(QPCPP)/3rd_party/nucleo-h743zi/Drivers/BSP/STM32H7xx_Nucleo_144 \
-	$(QPCPP)/3rd_party/nucleo-h743zi/Drivers/STM32H7xx_HAL_Driver/Src
+	$(QPCPP)/3rd_party/STM32CubeH7/nucleo-h743zi/gnu \
+	$(QPCPP)/3rd_party/STM32CubeH7/Drivers/BSP\STM32H7xx_Nucleo_144 \
+	$(QPCPP)/3rd_party/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Src \
+	$(QPCPP)/3rd_party/STM32CubeH7/Drivers/CMSIS/Device/ST/STM32H7xx/Source/Templates
 
 # list of all include directories needed by this project
 INCLUDES  = \
 	-I../.. \
 	-I$(QPCPP)/include \
-	-I$(QPCPP)/src \
 	-I$(QP_PORT_DIR) \
 	-I$(QPCPP)/3rd_party/CMSIS/Include \
-	-I$(QPCPP)/3rd_party/nucleo-h743zi \
-	-I$(QPCPP)/3rd_party/nucleo-h743zi/Drivers/BSP/STM32H7xx_Nucleo_144 \
-	-I$(QPCPP)/3rd_party/nucleo-h743zi/Drivers/STM32H7xx_HAL_Driver/Inc
+	-I$(QPCPP)/3rd_party/STM32CubeH7/Drivers/CMSIS/Device/ST/STM32H7xx/Include \
+	-I$(QPCPP)/3rd_party/STM32CubeH7/Drivers/BSP/STM32H7xx_Nucleo_144 \
+	-I$(QPCPP)/3rd_party/STM32CubeH7/Drivers/STM32H7xx_HAL_Driver/Inc
 
 #-----------------------------------------------------------------------------
 # files
@@ -148,7 +147,11 @@ LIB_DIRS  :=
 LIBS      :=
 
 # defines
-DEFINES   := -DQK_ON_CONTEXT_SW -DSTM32H743xx -DUSE_HAL_DRIVER -DUSE_STM32H7XX_NUCLEO_144
+DEFINES   := \
+	-DSTM32H743xx \
+	-DUSE_HAL_DRIVER \
+	-DUSE_STM32H7XX_NUCLEO_144 \
+	-DQF_ON_CONTEXT_SW
 
 # ARM CPU, ARCH, FPU, and Float-ABI types...
 # ARM_CPU:   [cortex-m0 | cortex-m0plus | cortex-m1 | cortex-m3 | cortex-m4]
@@ -189,7 +192,7 @@ MKDIR := mkdir
 RM    := rm
 
 #-----------------------------------------------------------------------------
-# build options for various configurations for ARM Cortex-M4F
+# build options for various configurations for ARM Cortex-M
 #
 
 # combine all the soruces...
@@ -276,7 +279,7 @@ $(TARGET_BIN): $(TARGET_ELF)
 	$(BIN) -O binary $< $@
 
 $(TARGET_ELF) : $(ASM_OBJS_EXT) $(C_OBJS_EXT) $(CPP_OBJS_EXT)
-	$(CPP) $(CPPFLAGS) $(QPCPP)/include/qstamp.cpp -o $(BIN_DIR)/qstamp.o
+	$(CPP) $(CPPFLAGS) $(QPCPP)/src/qs/qstamp.cpp -o $(BIN_DIR)/qstamp.o
 	$(LINK) $(LINKFLAGS) -o $@ $^ $(BIN_DIR)/qstamp.o $(LIBS)
 
 $(BIN_DIR)/%.d : %.c
@@ -309,7 +312,7 @@ clean:
 	$(BIN_DIR)/*.bin \
 	$(BIN_DIR)/*.elf \
 	$(BIN_DIR)/*.map
-	
+
 show:
 	@echo PROJECT = $(PROJECT)
 	@echo CONF = $(CONF)

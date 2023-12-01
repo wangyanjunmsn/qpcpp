@@ -1,7 +1,7 @@
-//****************************************************************************
+//============================================================================
 // Purpose: Fixture for QUTEST
-// Last updated for version 6.9.1
-// Last updated on  2020-09-21
+// Last updated for version 7.3.0
+// Last updated on  2023-07-19
 //
 //                    Q u a n t u m  L e a P s
 //                    ------------------------
@@ -30,7 +30,7 @@
 // Contact information:
 // <www.state-machine.com/licensing>
 // <info@state-machine.com>
-//****************************************************************************
+//============================================================================
 #include "qpcpp.hpp"
 #include "my_app.hpp" // My Application
 
@@ -45,7 +45,9 @@ int main(int argc, char *argv[]) {
     QF::init();   // initialize the framework and the underlying RT kernel
 
     // initialize the QS software tracing
-    Q_ALLEGE(QS_INIT(argc > 1 ? argv[1] : nullptr));
+    if (!QS_INIT(argc > 1 ? argv[1] : nullptr)) {
+        Q_ERROR();
+    }
 
     // object dictionaries...
     QS_OBJ_DICTIONARY(AO_MyAO);
@@ -54,7 +56,7 @@ int main(int argc, char *argv[]) {
     QS_TEST_PAUSE();
 
     // initialize publish-subscribe..
-    QF::psInit(subscrSto, Q_DIM(subscrSto));
+    QActive::psInit(subscrSto, Q_DIM(subscrSto));
 
     // initialize event pools...
     QF::poolInit(smlPoolSto, sizeof(smlPoolSto), sizeof(smlPoolSto[0]));

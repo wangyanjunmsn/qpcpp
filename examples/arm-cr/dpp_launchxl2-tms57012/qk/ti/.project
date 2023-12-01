@@ -46,14 +46,14 @@
 			<locationURI>PARENT-1-PROJECT_LOC/bsp.cpp</locationURI>
 		</link>
 		<link>
-			<name>bsp.h</name>
+			<name>bsp.hpp</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/bsp.h</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/bsp.hpp</locationURI>
 		</link>
 		<link>
-			<name>dpp.h</name>
+			<name>dpp.hpp</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/dpp.h</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/dpp.hpp</locationURI>
 		</link>
 		<link>
 			<name>launchxl2-tms57012</name>
@@ -63,17 +63,12 @@
 		<link>
 			<name>main.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/main.cpp</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/main.cpp</locationURI>
 		</link>
 		<link>
 			<name>philo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/philo.cpp</locationURI>
-		</link>
-		<link>
-			<name>qstamp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/qstamp.cpp</locationURI>
 		</link>
 		<link>
 			<name>table.cpp</name>

@@ -1,7 +1,7 @@
 ##############################################################################
 # Product: Makefile for QP/C++, lwIP on EK-LM3S6965, QV kernel, GNU-ARM
-# Last Updated for Version: 6.5.0
-# Date of the Last Update:  2019-04-15
+# Last Updated for Version: 7.0.1
+# Date of the Last Update:  2022-05-23
 #
 #                    Q u a n t u m  L e a P s
 #                    ------------------------
@@ -75,14 +75,13 @@ VPATH = \
 	$(QP_PORT_DIR) \
 	$(QPCPP)/3rd_party/ek-lm3s6965 \
 	$(QPCPP)/3rd_party/ek-lm3s6965/gnu \
-	$(QPCPP)/3rd_party/ek-lm3s6965/lwip_driver/netif \
+	$(QPCPP)/3rd_party/ek-lm3s6965/lwip_driver/netif_cpp \
 	$(QPCPP)/3rd_party/lwip/apps/webserver_raw
 
 # list of all include directories needed by this project
 INCLUDES  = \
 	-I../.. \
 	-I$(QPCPP)/include \
-	-I$(QPCPP)/src \
 	-I$(QP_PORT_DIR) \
 	-I$(QPCPP)/3rd_party/CMSIS/Include \
 	-I$(QPCPP)/3rd_party/ek-lm3s6965 \
@@ -271,7 +270,7 @@ $(TARGET_BIN): $(TARGET_ELF)
 	$(BIN) -O binary $< $@
 
 $(TARGET_ELF) : $(ASM_OBJS_EXT) $(C_OBJS_EXT) $(CPP_OBJS_EXT)
-	$(CPP) $(CPPFLAGS) $(QPCPP)/include/qstamp.cpp -o $(BIN_DIR)/qstamp.o
+	$(CPP) $(CPPFLAGS) $(QPCPP)/src/qs/qstamp.cpp -o $(BIN_DIR)/qstamp.o
 	$(LINK) $(LINKFLAGS) -o $@ $^ $(BIN_DIR)/qstamp.o $(LIBS)
 
 $(BIN_DIR)/%.d : %.c
